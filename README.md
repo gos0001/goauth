@@ -76,7 +76,7 @@ services:
     restart: unless-stopped
 
   goauth:
-    image: ghcr.io/gos0001/goauth:v1
+    image: ghcr.io/gos0001/goauth:1
     environment:
       POSTGRES_URL: postgres://goauth:${POSTGRES_PASSWORD}@postgres:5432/goauth?sslmode=disable
       REDIS_URL: redis://redis:6379
@@ -140,7 +140,7 @@ docker run -d --name goauth --restart unless-stopped -p 8080:8080 \
   -e JWT_AUDIENCE=my-app \
   -e SUPER_ADMIN_USERNAME=superadmin \
   -e APP_ENV=production \
-  ghcr.io/gos0001/goauth:v1
+  ghcr.io/gos0001/goauth:1
 
 docker logs goauth | grep 'generated password'
 ```
@@ -242,24 +242,37 @@ than serving against tables it does not understand.
 
 ### Image tags
 
-`latest` from `main`, `v1.2.3` / `v1.2` / `v1` from release tags, and
-`sha-<short>` on every build. Pin at least a major (`:v1`) for anything you will
-not be watching; pin a digest (`@sha256:…`) where the image must not move at
-all. Built for `linux/amd64` and `linux/arm64`.
+| Tag | Moves when | Use it for |
+|---|---|---|
+| `1`, `1.2`, `1.2.3` | a `v*` git tag is pushed | anything you deploy |
+| `latest` | a `v*` git tag is pushed | trying it out |
+| `edge` | any push to `main` | following development |
+| `sha-abc1234` | every build | pinning an exact commit |
 
-`docker run --rm ghcr.io/gos0001/goauth:v1 version` prints the version and
-commit a given image was built from.
+Note there is no `v` on the image tags: git tag `v1.2.3` publishes `1.2.3`,
+`1.2` and `1`, the same convention the official Docker images use.
+
+`latest` follows **releases, not `main`** — otherwise the first merge after a
+release would silently replace the released image for everyone pulling it.
+`edge` is the tag for the newest commit on `main`.
+
+Pin at least a major (`:1`) for anything you will not be watching, and a digest
+(`@sha256:…`) where the image must not move at all. Built for `linux/amd64` and
+`linux/arm64`.
+
+`docker run --rm ghcr.io/gos0001/goauth:1 version` prints the version and commit
+a given image was built from.
 
 ## Using it from another project
 
 Add goauth beside that project's own services. Pin a major or exact version —
-`latest` is fine for a laptop and a poor idea for anything you will not be
+`latest` is fine for trying it out and a poor idea for anything you will not be
 watching:
 
 ```yaml
 services:
   auth:
-    image: ghcr.io/gos0001/goauth:v1
+    image: ghcr.io/gos0001/goauth:1
     environment:
       POSTGRES_URL: postgres://postgres:postgres@postgres:5432/goauth?sslmode=disable
       REDIS_URL: redis://redis:6379

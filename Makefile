@@ -67,9 +67,12 @@ image:
 image-login:
 	@echo $$GITHUB_TOKEN | docker login ghcr.io -u gos0001 --password-stdin
 
+# Pushes only the version tag. `latest` and the semver aliases are owned by CI,
+# which moves them on a release tag — a manual push must not be able to point
+# `latest` at an unreviewed local build.
 image-push:
 	@docker buildx build $(BUILD_ARGS) --platform $(PLATFORMS) \
-		-t $(IMAGE):$(VERSION) -t $(IMAGE):latest --push .
+		-t $(IMAGE):$(VERSION) --push .
 	@echo "pushed $(IMAGE):$(VERSION) for $(PLATFORMS)"
 
 # Run the locally built image against the compose Postgres and Redis.

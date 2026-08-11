@@ -57,16 +57,26 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Tag scheme:
+      #   push to main    -> edge, sha-abc1234
+      #   push tag v1.2.3 -> 1.2.3, 1.2, 1, latest, sha-abc1234
+      #
+      # `latest` is left to `flavor: latest=auto`, which applies it only on a
+      # semver tag and skips pre-releases. Pointing `latest` at the tip of main
+      # instead — as a raw tag enabled on the default branch would — means the
+      # first merge after a release silently replaces the released image for
+      # everyone pulling `latest`. `edge` is the tag for "newest commit on main".
       - name: Resolve tags
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository }}
+          flavor: latest=auto
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=edge,branch=main
             type=sha,format=short
 
       # Stamped into the binary and read back by `goauth version`. Computed here
