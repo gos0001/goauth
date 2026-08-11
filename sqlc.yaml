@@ -1,0 +1,19 @@
+version: "2"
+sql:
+  - engine: "postgresql"
+    queries: "internal/adapter/postgres/queries"
+    schema: "migrations"
+    gen:
+      go:
+        package: "generated"
+        out: "internal/adapter/postgres/generated"
+        # pkg/postgres owns a pgxpool, so the generated code must speak pgx —
+        # the database/sql default emits QueryRowContext, which pgxpool has not.
+        sql_package: "pgx/v5"
+        emit_json_tags: true
+        emit_prepared_queries: false
+        emit_interface: false
+        emit_exact_table_names: false
+        overrides:
+          - db_type: "uuid"
+            go_type: "github.com/google/uuid.UUID"

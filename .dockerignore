@@ -1,0 +1,26 @@
+# Keep the build context to what the compiler actually needs. Everything here
+# would otherwise be copied into a build layer and cached — including secrets.
+
+.git/
+.github/
+bin/
+tmp/
+
+# Real signing keys and admin tokens live here. They never reach the final image
+# (only the binary is copied forward) but they would land in a build layer and
+# in the shared build cache.
+.env
+.env.*
+!.env.example
+*.local.env
+
+Dockerfile*
+docker-compose.yml
+.dockerignore
+
+.claude/
+*.md
+LICENSE
+
+# NOTE: migrations/ is deliberately NOT ignored — migrations/embed.go compiles
+# the .sql files into the binary so the image can create its own schema.

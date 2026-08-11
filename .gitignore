@@ -1,0 +1,12 @@
+bin/
+tmp/
+
+# Local environment files hold real signing keys and admin tokens. Only
+# .env.example — which has the same variables with empty secrets — is committed.
+.env
+.env.*
+!.env.example
+*.local.env
+
+# .claude/ is intentionally NOT ignored — the architecture contract travels with
+# the repository so every agent or contributor works from the same rules.
