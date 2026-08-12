@@ -244,19 +244,19 @@ not recognise.
 
 ### Image tags
 
-| Tag | Moves when | Use it for |
+| Tag | Points at | Use it for |
 |---|---|---|
-| `1`, `1.2`, `1.2.3` | a `v*` git tag is pushed | anything you deploy |
-| `latest` | a `v*` git tag is pushed | trying it out |
-| `edge` | any push to `main` | following development |
-| `sha-abc1234` | every build | pinning an exact commit |
+| `1.2.3` | that exact release, forever | reproducible deploys |
+| `1.2`, `1` | the newest release in that line | deploys that take patches |
+| `latest` | the newest release | trying it out |
+| `edge` | the newest development build | following development |
+| `sha-abc1234` | one exact commit | pinning without a release |
 
-Note there is no `v` on the image tags: git tag `v1.2.3` publishes `1.2.3`,
-`1.2` and `1`, the same convention the official Docker images use.
+Note there is no `v` on the image tags: release `v1.2.3` publishes `1.2.3`, `1.2`
+and `1`, the same convention the official Docker images use.
 
-`latest` follows **releases, not `main`** — otherwise the first merge after a
-release would silently replace the released image for everyone pulling it.
-`edge` is the tag for the newest commit on `main`.
+`latest` follows **releases, not development** — a merge never replaces the image
+you are running. `edge` is the one that moves with every change.
 
 Pin at least a major (`:1`) for anything you will not be watching, and a digest
 (`@sha256:…`) where the image must not move at all. Built for `linux/amd64` and
@@ -468,26 +468,6 @@ bootstrap administrator — only if the installation has no active admin. That
 account is forced to change its password on first login, because the bootstrap
 password is visible in the process environment, `docker inspect`, shell history
 and CI logs.
-
-### Building and publishing the image
-
-```bash
-make image                      # single-arch, into the local daemon
-make image-run                  # run it against the compose Postgres and Redis
-export GITHUB_TOKEN=...         # a PAT with write:packages
-make image-login
-make image-push VERSION=v1.0.0  # linux/amd64 + linux/arm64 to GHCR
-```
-
-Pushing to `main` or a `v*` tag does the same through Actions
-(`.github/workflows/ci.yml`), after `go vet` and the race-enabled test suite
-pass — so a broken build never reaches the registry. Pull requests build both
-architectures but never publish.
-
-**One manual step after the very first successful run:** GHCR creates a new
-package as *private* no matter the repository's visibility, so a pull from
-anywhere else answers `401`. Open GitHub → Packages → `goauth` → Package
-settings → Change visibility → Public. It only has to be done once.
 
 ## Endpoints
 
@@ -754,8 +734,6 @@ Package names must be globally unique, because wire aliases packages by name:
 | `jwt-key` / `admin-token` | generate a credential |
 | `docker-up` / `docker-down` | dependencies via compose |
 | `image` | build the container image locally |
-| `image-login` / `image-push` | publish multi-arch to GHCR |
-| `image-run` | run the local image against the compose services |
 
 ## Architecture
 
