@@ -33,7 +33,8 @@ password" flow. A locked-out user is recovered by an admin calling
 
 **Contents:** [Install](#install) · [Using it from another
 project](#using-it-from-another-project) · [Endpoints](#endpoints) ·
-[Configuration](#configuration) · [Build from source](#build-from-source) ·
+[Configuration](#configuration) · [Claude Code plugin](#use-it-with-claude-code) ·
+[Build from source](#build-from-source) ·
 [Architecture](#architecture)
 
 ## Install
@@ -264,6 +265,22 @@ Pin at least a major (`:1`) for anything you will not be watching, and a digest
 
 `docker run --rm ghcr.io/gos0001/goauth:1 version` prints the version and commit
 a given image was built from.
+
+## Use it with Claude Code
+
+A plugin carrying the integration contract — deployment, token verification, and
+the boundary between goauth's data and your own — so Claude wires it in correctly
+inside *your* project:
+
+```
+/plugin marketplace add gos0001/goauth
+/plugin install goauth@goauth
+```
+
+It adds a `goauth` skill and two commands: `/goauth-add` puts the service into
+your compose file with its own database and generated secrets, and
+`/goauth-verify` wires token verification into your service in whatever language
+it is written in.
 
 ## Using it from another project
 

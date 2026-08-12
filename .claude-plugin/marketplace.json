@@ -1,0 +1,18 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "goauth",
+  "description": "Claude Code plugin for integrating goauth, a self-hostable identity service, into your own project.",
+  "owner": {
+    "name": "gos0001",
+    "url": "https://github.com/gos0001"
+  },
+  "plugins": [
+    {
+      "name": "goauth",
+      "description": "Deploy goauth and wire it into your service: container setup, token verification against JWKS, and the external_id contract that keeps auth and product data apart.",
+      "source": "./plugin",
+      "category": "security",
+      "homepage": "https://github.com/gos0001/goauth"
+    }
+  ]
+}
