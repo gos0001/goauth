@@ -1,4 +1,4 @@
-.PHONY: dev build run generate wire test lint build-prod tools sqlc migrate-up migrate-down migrate-create docker-up docker-down jwt-key admin-token image image-push image-login image-run
+.PHONY: dev build run generate wire test lint build-prod tools sqlc docker-up docker-down jwt-key admin-token image image-push image-login image-run
 
 APP_BIN := ./bin/app
 ENV_FILE := .env.development
@@ -47,7 +47,6 @@ tools:
 	@go install github.com/air-verse/air@latest
 	@go install github.com/google/wire/cmd/wire@latest
 	@go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
-	@go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
 	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 
 docker-up:
@@ -93,14 +92,3 @@ jwt-key:
 # browser must never be given this value.
 admin-token:
 	@openssl rand -base64 32
-
-migrate-create:
-	@migrate create -ext sql -dir migrations -seq $(name)
-
-migrate-up:
-	@export $$(cat $(ENV_FILE) | grep -v '^#' | xargs) && \
-		migrate -path migrations -database $$POSTGRES_URL up
-
-migrate-down:
-	@export $$(cat $(ENV_FILE) | grep -v '^#' | xargs) && \
-		migrate -path migrations -database $$POSTGRES_URL down 1

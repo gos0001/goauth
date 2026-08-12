@@ -12,6 +12,7 @@ import (
 	"github.com/gos0001/goauth/internal/controller/http_v1"
 	"github.com/gos0001/goauth/internal/middleware"
 	"github.com/gos0001/goauth/internal/orchestrators/bootstrap"
+	"github.com/gos0001/goauth/internal/orchestrators/cron"
 	"github.com/gos0001/goauth/internal/service/audit"
 	"github.com/gos0001/goauth/internal/service/tokens"
 	"github.com/gos0001/goauth/internal/usecases/admin/admin_audit_list"
@@ -23,6 +24,7 @@ import (
 	"github.com/gos0001/goauth/internal/usecases/admin/admin_user_sessions_revoke"
 	"github.com/gos0001/goauth/internal/usecases/admin/admin_user_set_password"
 	"github.com/gos0001/goauth/internal/usecases/admin/admin_user_update"
+	"github.com/gos0001/goauth/internal/usecases/audit_cleaner"
 	"github.com/gos0001/goauth/internal/usecases/auth/auth_jwks"
 	"github.com/gos0001/goauth/internal/usecases/auth/auth_logout_all"
 	"github.com/gos0001/goauth/internal/usecases/auth/auth_me"
@@ -33,16 +35,17 @@ import (
 	"github.com/gos0001/goauth/internal/usecases/auth/auth_token"
 	"github.com/gos0001/goauth/internal/usecases/auth/session_list"
 	"github.com/gos0001/goauth/internal/usecases/seed_super_admin"
+	"github.com/gos0001/goauth/internal/usecases/session_cleaner"
 	"github.com/gos0001/goauth/internal/usecases/sys/sys_health"
-	"github.com/gos0001/goauth/migrations"
+	"github.com/gos0001/goauth/pkg/dbschema"
 	"github.com/gos0001/goauth/pkg/logger"
-	"github.com/gos0001/goauth/pkg/migrator"
 	"github.com/gos0001/goauth/pkg/passwordhash"
 	"github.com/gos0001/goauth/pkg/postgres"
 	"github.com/gos0001/goauth/pkg/ratelimit"
 	"github.com/gos0001/goauth/pkg/realip"
 	"github.com/gos0001/goauth/pkg/redis"
 	"github.com/gos0001/goauth/pkg/token"
+	"github.com/gos0001/goauth/schema"
 )
 
 // Injectors from wire.go:
@@ -171,22 +174,35 @@ func InitializeApp() (*App, error) {
 	handlers := admin_v1.NewHandlers(admin_user_createHTTPv1, admin_user_listHTTPv1, admin_user_getHTTPv1, admin_user_updateHTTPv1, admin_user_deleteHTTPv1, admin_user_set_passwordHTTPv1, admin_user_sessions_listHTTPv1, admin_user_sessions_revokeHTTPv1, admin_audit_listHTTPv1)
 	engine := http_v1.New(middlewareMiddleware, limits, httPv1, auth_jwksHTTPv1, auth_settingsHTTPv1, auth_tokenHTTPv1, auth_registerHTTPv1, auth_meHTTPv1, session_listHTTPv1, auth_password_changeHTTPv1, auth_revokeHTTPv1, auth_logout_allHTTPv1, handlers)
 	router := admin_v1.NewRouter(middlewareMiddleware, middlewareConfig, handlers)
-	migratorConfig, err := migrator.LoadConfig()
+	definition := schema.Definition()
+	dbschemaConfig, err := dbschema.LoadConfig()
 	if err != nil {
 		return nil, err
 	}
-	fs := migrations.FS()
-	migratorMigrator := migrator.New(migratorConfig, fs)
+	applier := dbschema.New(pool, definition, dbschemaConfig)
 	seed_super_adminConfig, err := seed_super_admin.LoadConfig()
 	if err != nil {
 		return nil, err
 	}
 	seed_super_adminUsecase := seed_super_admin.New(adapter, hasher, recorder, seed_super_adminConfig)
-	bootstrapBootstrap := bootstrap.New(migratorMigrator, seed_super_adminUsecase, sugaredLogger)
+	bootstrapBootstrap := bootstrap.New(applier, seed_super_adminUsecase, sugaredLogger)
+	audit_cleanerConfig, err := audit_cleaner.LoadConfig()
+	if err != nil {
+		return nil, err
+	}
+	audit_cleanerUsecase := audit_cleaner.New(adapter, audit_cleanerConfig)
+	cronJob := audit_cleaner.NewCronJob(audit_cleanerUsecase, sugaredLogger, audit_cleanerConfig)
+	session_cleanerUsecase := session_cleaner.New(adapter)
+	session_cleanerConfig, err := session_cleaner.LoadConfig()
+	if err != nil {
+		return nil, err
+	}
+	session_cleanerCronJob := session_cleaner.NewCronJob(session_cleanerUsecase, sugaredLogger, session_cleanerConfig)
+	cronCron := cron.New(cronJob, session_cleanerCronJob, sugaredLogger)
 	mainConfig, err := LoadConfig()
 	if err != nil {
 		return nil, err
 	}
-	app := NewApp(sugaredLogger, engine, router, bootstrapBootstrap, mainConfig, pool, client)
+	app := NewApp(sugaredLogger, engine, router, bootstrapBootstrap, cronCron, mainConfig, pool, client)
 	return app, nil
 }

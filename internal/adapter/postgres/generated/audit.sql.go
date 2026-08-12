@@ -11,6 +11,35 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const deleteAuditEntriesBefore = `-- name: DeleteAuditEntriesBefore :execrows
+DELETE FROM ga_audit_log WHERE created_at < $1
+`
+
+func (q *Queries) DeleteAuditEntriesBefore(ctx context.Context, createdAt pgtype.Timestamptz) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteAuditEntriesBefore, createdAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteAuditEntriesBeyond = `-- name: DeleteAuditEntriesBeyond :execrows
+DELETE FROM ga_audit_log
+WHERE id NOT IN (
+    SELECT id FROM ga_audit_log ORDER BY created_at DESC, id DESC LIMIT $1
+)
+`
+
+// Keeps only the newest N entries. The subquery is ordered the same way
+// ListAuditEntries is, so "newest" means the same thing in both.
+func (q *Queries) DeleteAuditEntriesBeyond(ctx context.Context, limit int32) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteAuditEntriesBeyond, limit)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const insertAuditEntry = `-- name: InsertAuditEntry :exec
 INSERT INTO ga_audit_log (actor, action, target_user_id, ip, meta)
 VALUES (

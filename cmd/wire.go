@@ -10,6 +10,7 @@ import (
 	"github.com/gos0001/goauth/internal/controller/http_v1"
 	"github.com/gos0001/goauth/internal/middleware"
 	"github.com/gos0001/goauth/internal/orchestrators/bootstrap"
+	"github.com/gos0001/goauth/internal/orchestrators/cron"
 	"github.com/gos0001/goauth/internal/service/audit"
 	"github.com/gos0001/goauth/internal/service/tokens"
 	"github.com/gos0001/goauth/internal/usecases/admin/admin_audit_list"
@@ -21,6 +22,7 @@ import (
 	"github.com/gos0001/goauth/internal/usecases/admin/admin_user_sessions_revoke"
 	"github.com/gos0001/goauth/internal/usecases/admin/admin_user_set_password"
 	"github.com/gos0001/goauth/internal/usecases/admin/admin_user_update"
+	"github.com/gos0001/goauth/internal/usecases/audit_cleaner"
 	"github.com/gos0001/goauth/internal/usecases/auth/auth_jwks"
 	"github.com/gos0001/goauth/internal/usecases/auth/auth_logout_all"
 	"github.com/gos0001/goauth/internal/usecases/auth/auth_me"
@@ -31,16 +33,17 @@ import (
 	"github.com/gos0001/goauth/internal/usecases/auth/auth_token"
 	"github.com/gos0001/goauth/internal/usecases/auth/session_list"
 	"github.com/gos0001/goauth/internal/usecases/seed_super_admin"
+	"github.com/gos0001/goauth/internal/usecases/session_cleaner"
 	"github.com/gos0001/goauth/internal/usecases/sys/sys_health"
-	"github.com/gos0001/goauth/migrations"
+	"github.com/gos0001/goauth/pkg/dbschema"
 	"github.com/gos0001/goauth/pkg/logger"
-	"github.com/gos0001/goauth/pkg/migrator"
 	"github.com/gos0001/goauth/pkg/passwordhash"
 	pkgpostgres "github.com/gos0001/goauth/pkg/postgres"
 	"github.com/gos0001/goauth/pkg/ratelimit"
 	"github.com/gos0001/goauth/pkg/realip"
 	pkgredis "github.com/gos0001/goauth/pkg/redis"
 	"github.com/gos0001/goauth/pkg/token"
+	"github.com/gos0001/goauth/schema"
 	// codegen:imports
 )
 
@@ -50,8 +53,8 @@ func InitializeApp() (*App, error) {
 		logger.Set,
 		pkgpostgres.Set,
 		pkgredis.Set,
-		migrations.Set,
-		migrator.Set,
+		schema.Set,
+		dbschema.Set,
 
 		// pkg primitives
 		passwordhash.Set,
@@ -76,6 +79,8 @@ func InitializeApp() (*App, error) {
 		auth_revoke.Set,
 		auth_logout_all.Set,
 		seed_super_admin.Set,
+		audit_cleaner.Set,
+		session_cleaner.Set,
 
 		admin_user_create.Set,
 		admin_user_list.Set,
@@ -93,6 +98,7 @@ func InitializeApp() (*App, error) {
 		http_v1.Set,
 
 		bootstrap.Set,
+		cron.Set,
 		// codegen:providers
 		NewApp,
 	)

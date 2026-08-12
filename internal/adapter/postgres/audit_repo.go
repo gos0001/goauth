@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/gos0001/goauth/internal/adapter/postgres/generated"
 	"github.com/gos0001/goauth/internal/domain"
@@ -73,4 +74,23 @@ func (a *Adapter) ListAuditEntries(ctx context.Context, p ListAuditParams) ([]do
 		out = append(out, entry)
 	}
 	return out, nil
+}
+
+// DeleteAuditEntriesBefore removes entries older than the cutoff and reports how
+// many went.
+func (a *Adapter) DeleteAuditEntriesBefore(ctx context.Context, cutoff time.Time) (int, error) {
+	n, err := a.q.DeleteAuditEntriesBefore(ctx, ts(cutoff))
+	if err != nil {
+		return 0, MapError(err, nil)
+	}
+	return int(n), nil
+}
+
+// DeleteAuditEntriesBeyond trims the log to its newest keep entries.
+func (a *Adapter) DeleteAuditEntriesBeyond(ctx context.Context, keep int) (int, error) {
+	n, err := a.q.DeleteAuditEntriesBeyond(ctx, int32(keep))
+	if err != nil {
+		return 0, MapError(err, nil)
+	}
+	return int(n), nil
 }

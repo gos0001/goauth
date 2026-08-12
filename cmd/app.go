@@ -11,6 +11,7 @@ import (
 
 	"github.com/gos0001/goauth/internal/controller/admin_v1"
 	"github.com/gos0001/goauth/internal/orchestrators/bootstrap"
+	"github.com/gos0001/goauth/internal/orchestrators/cron"
 	pkgpostgres "github.com/gos0001/goauth/pkg/postgres"
 	pkgredis "github.com/gos0001/goauth/pkg/redis"
 )
@@ -18,6 +19,7 @@ import (
 type App struct {
 	logger    *zap.SugaredLogger
 	bootstrap *bootstrap.Bootstrap
+	cron      *cron.Cron
 
 	httpServer  *http.Server
 	adminServer *http.Server
@@ -31,6 +33,7 @@ func NewApp(
 	router *gin.Engine,
 	adminRouter *admin_v1.Router,
 	boot *bootstrap.Bootstrap,
+	scheduler *cron.Cron,
 	cfg Config,
 	pg *pkgpostgres.Pool,
 	rdb *pkgredis.Client,
@@ -38,6 +41,7 @@ func NewApp(
 	app := &App{
 		logger:    logger,
 		bootstrap: boot,
+		cron:      scheduler,
 		httpServer: &http.Server{
 			Addr:    cfg.Addr,
 			Handler: router,
@@ -89,6 +93,10 @@ func (a *App) Run(build BuildInfo) {
 		a.logger.Info("admin listener disabled: ADMIN_TOKEN is not set")
 	}
 
+	// Housekeeping starts only once the listeners are up, so a slow first sweep
+	// cannot delay the service becoming available.
+	a.cron.Start(context.Background())
+
 	waitForShutdown(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
@@ -102,6 +110,9 @@ func (a *App) Run(build BuildInfo) {
 				a.logger.Errorw("admin shutdown error", "error", err)
 			}
 		}
+
+		// Before the pool closes: a job mid-query would otherwise find it shut.
+		a.cron.Stop()
 
 		a.pg.Close()
 		if err := a.rdb.Close(); err != nil {

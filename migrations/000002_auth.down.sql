@@ -1,3 +1,0 @@
-DROP TABLE IF EXISTS ga_audit_log;
-DROP TABLE IF EXISTS ga_sessions;
-DROP TABLE IF EXISTS ga_users;

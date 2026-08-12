@@ -38,10 +38,10 @@ project](#using-it-from-another-project) · [Endpoints](#endpoints) ·
 
 ## Install
 
-Requirements: Docker, a Postgres 13+ database, and a Redis. Nothing else — no
-Go toolchain, no source checkout, no separate migration step. The image carries
-its migrations compiled into the binary and applies them on startup, so an
-**empty database** is all it needs.
+Requirements: Docker, a Postgres 13+ server, and a Redis. Nothing else — no Go
+toolchain, no source checkout, no migration step. The schema is compiled into the
+binary; on startup goauth creates its database if it is missing, creates any
+missing tables, and serves. Pointing it at a server is enough.
 
 ### Option A — Docker Compose, everything in one file
 
@@ -145,8 +145,9 @@ docker run -d --name goauth --restart unless-stopped -p 8080:8080 \
 docker logs goauth | grep 'generated password'
 ```
 
-Create the database first if it does not exist — goauth creates its tables, not
-its database:
+The database does not need to exist first — goauth creates it. Where the role is
+not allowed to (`NOCREATEDB`, common on managed Postgres), create it once by hand
+and goauth will use it as-is:
 
 ```sql
 CREATE DATABASE goauth;
@@ -231,14 +232,15 @@ configured rather than guessed.
 docker compose pull goauth && docker compose up -d goauth
 ```
 
-Pending migrations apply on startup, before the listeners open. They run under a
-Postgres advisory lock, so several replicas may start against one database
-simultaneously: exactly one applies the schema, exactly one creates the admin,
-and the rest wait and carry on.
+The schema is checked on startup, before the listeners open, and anything missing
+is created. It runs under a Postgres advisory lock, so several replicas may start
+against one database — or against no database at all — simultaneously: exactly
+one creates it, exactly one creates the admin, and the rest carry on.
 
-Set `AUTO_MIGRATE=false` where a deployment pipeline owns schema changes. The
-service then refuses to boot against a schema that has not been applied, rather
-than serving against tables it does not understand.
+Set `DB_AUTO_SCHEMA=false` where a deployment pipeline owns schema changes, and
+`DB_AUTO_CREATE=false` where the database is provisioned by other tooling. With
+either off, goauth refuses to serve rather than running against something it does
+not recognise.
 
 ### Image tags
 
@@ -265,20 +267,76 @@ a given image was built from.
 
 ## Using it from another project
 
-Add goauth beside that project's own services. Pin a major or exact version —
-`latest` is fine for trying it out and a poor idea for anything you will not be
-watching:
+### Give goauth its own database
+
+Not its own tables in your database — **its own database**. One Postgres server
+is fine, and usually right; a second Postgres container buys nothing but another
+thing to back up.
+
+Three reasons, in order of how badly they bite:
+
+- **Table names are the only thing keeping the two apart otherwise.** goauth
+  prefixes everything with `ga_`, so a shared database happens to work — until
+  the day your application wants a table of its own by that name, or a `DROP
+  SCHEMA public CASCADE` in one service takes the other with it.
+- **A cross-database join is impossible in Postgres.** That turns "never join
+  against `ga_users`" from a convention that erodes under deadline pressure into
+  a constraint the database enforces for you.
+- **goauth's data can be dumped, restored, and moved independently** of the
+  product's. Separate lifecycles want separate `pg_dump` files.
+
+goauth creates the database itself when the role is allowed to, so in the compose
+below nothing needs pre-creating. Where the role is restricted — `NOCREATEDB`, as
+managed Postgres often gives you — create it once with an init script, which runs
+on an empty data volume:
+
+```
+initdb/01-databases.sql
+```
+
+```sql
+CREATE DATABASE goauth;
+CREATE DATABASE myapp;
+```
+
+### Compose
 
 ```yaml
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set it in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Optional: goauth creates its own database. This is for pre-creating
+      # your application's, and for roles that may not create databases.
+      # Runs only on an empty data volume.
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   auth:
     image: ghcr.io/gos0001/goauth:1
     environment:
-      POSTGRES_URL: postgres://postgres:postgres@postgres:5432/goauth?sslmode=disable
+      # its own database ────────────────────┐
+      POSTGRES_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/goauth?sslmode=disable
       REDIS_URL: redis://redis:6379
-      JWT_PRIVATE_KEY: ${GOAUTH_JWT_PRIVATE_KEY}
+      JWT_PRIVATE_KEY: ${GOAUTH_JWT_PRIVATE_KEY:?run openssl rand -base64 32}
       JWT_AUDIENCE: my-app
       SUPER_ADMIN_USERNAME: superadmin
+      APP_ENV: production
       # Reachable only from this network — do not publish 8081.
       ADMIN_ADDR: "0.0.0.0:8081"
     ports:
@@ -286,14 +344,76 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
+
+  myapp:
+    image: myapp:latest
+    environment:
+      # yours ───────────────────────────────┐
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/myapp?sslmode=disable
+      GOAUTH_JWKS_URL: http://auth:8080/.well-known/jwks.json
+      GOAUTH_AUDIENCE: my-app
+    depends_on:
+      auth: { condition: service_started }
 ```
 
-For deployments that must not move underneath you, pin the digest instead —
-a tag can be repointed, a digest cannot:
+Pin a major or exact version — `latest` is fine for trying it out and a poor
+idea for anything you will not be watching. For deployments that must not move
+underneath you, pin the digest instead, since a tag can be repointed and a digest
+cannot:
 
 ```
 ghcr.io/gos0001/goauth@sha256:<digest>
 ```
+
+### Linking your users to goauth
+
+With separate databases there is no foreign key to reach for, which is the point.
+The application keeps its own user row and stores goauth's id beside it:
+
+```sql
+CREATE TABLE users (
+    id          bigserial PRIMARY KEY,
+    external_id uuid NOT NULL UNIQUE,   -- goauth's user id: the JWT `sub`
+    created_at  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE subscriptions (
+    user_id    bigint PRIMARY KEY REFERENCES users (id),
+    plan       text NOT NULL,
+    expires_at timestamptz
+);
+```
+
+Four decisions in that schema, each one people get wrong at least once:
+
+- **Your primary key stays yours.** Subscriptions, roles, orders and everything
+  else reference `users.id`, never the auth UUID. That is what makes swapping the
+  auth provider later a change to one column rather than to every foreign key in
+  the schema.
+- **`external_id` is unique and never reused.** It is the `sub` claim, read with
+  `authclient.UserID(c)`.
+- **The row is created on first sighting**, not pushed by goauth. On the first
+  authenticated request, upsert and carry on — goauth never learns that your
+  application exists, which is what keeps it reusable across projects.
+- **Deletion is two-sided.** goauth soft-deletes and clears identifiers; your row
+  survives, and you decide whether that means anonymise or remove.
+
+```go
+func (m *Users) Resolve(c *gin.Context) (int64, error) {
+    var id int64
+    err := m.db.QueryRow(c, `
+        INSERT INTO users (external_id) VALUES ($1)
+        ON CONFLICT (external_id) DO UPDATE SET external_id = EXCLUDED.external_id
+        RETURNING id`,
+        authclient.UserID(c),
+    ).Scan(&id)
+    return id, err
+}
+```
+
+The `DO UPDATE` that assigns the column to itself looks pointless but is not:
+`DO NOTHING` returns no row on conflict, so a returning-upsert needs an update
+that always fires.
 
 Then verify tokens in that project's Go service:
 
@@ -319,7 +439,7 @@ answers who the caller is, and nothing else.
 ## Build from source
 
 Requires Go 1.25+, Docker for the dependencies, and the tools `make tools`
-installs (air, wire, sqlc, migrate, golangci-lint).
+installs (air, wire, sqlc, golangci-lint).
 
 ```bash
 git clone https://github.com/gos0001/goauth.git
@@ -340,8 +460,8 @@ make dev                       # http://localhost:8080, rebuilds on change
 image — it is the identical program.
 
 `.env.development` is gitignored because it holds a real signing key; only
-`.env.example` is committed. Migrations are applied on startup here too —
-`make migrate-up` remains for applying them by hand without booting the service.
+`.env.example` is committed. The database and its tables are created on startup
+here too, so `make docker-up && make dev` against an empty Postgres is enough.
 
 On first boot, `SUPER_ADMIN_USERNAME` / `SUPER_ADMIN_PASSWORD` create the
 bootstrap administrator — only if the installation has no active admin. That
@@ -461,7 +581,8 @@ do — so blocking an account takes effect at once.
 | `ADMIN_REAUTH_WINDOW` | `15m` | sudo window for destructive admin calls |
 | `POSTGRES_URL` | — | required |
 | `REDIS_URL` | — | required; used for rate limiting |
-| `AUTO_MIGRATE` | `true` | apply embedded migrations at startup |
+| `DB_AUTO_CREATE` | `true` | create the database if it does not exist |
+| `DB_AUTO_SCHEMA` | `true` | create missing tables at startup |
 | `JWT_PRIVATE_KEY` | — | required; base64 of a 32-byte ed25519 seed |
 | `JWT_PREVIOUS_PUBLIC_KEYS` | — | retired keys, published but never used to sign |
 | `JWT_ISSUER` / `JWT_AUDIENCE` | `goauth` | verified on every token |
@@ -475,6 +596,10 @@ do — so blocking an account takes effect at once.
 | `RATELIMIT_LOGIN_IP` | `100/15m` | per IP bucket |
 | `RATELIMIT_LOGIN_PAIR` | `10/15m` | per IP + account |
 | `RATELIMIT_FAIL_CLOSED` | `true` | Redis down ⇒ refuse logins |
+| `AUDIT_RETENTION` | `720h` | delete audit entries older than this; `0` keeps everything |
+| `AUDIT_MAX_ROWS` | `0` | hard cap on audit rows, newest kept; `0` disables |
+| `AUDIT_CLEANUP_INTERVAL` | `6h` | how often the audit sweep runs; `0` disables |
+| `SESSION_CLEANUP_INTERVAL` | `1h` | how often expired sessions are swept; `0` disables |
 
 Password rules are a length floor and nothing else. Composition requirements
 (a digit, a symbol, mixed case) push people toward predictable substitutions and
@@ -526,34 +651,63 @@ goauth/
 │   └── orchestrators/bootstrap/
 ├── .github/workflows/          test, then multi-arch build and push to GHCR
 ├── pkg/
-│   ├── migrator/               applies the embedded migrations at startup
+│   ├── dbschema/               creates missing tables at startup
 │   ├── token/                  Ed25519 signing, JWKS
 │   ├── passwordhash/           argon2id, PHC encoding
 │   ├── realip/                 trusted-proxy aware client IP
 │   ├── ratelimit/              Redis counters and backoff
 │   ├── authclient/             what consuming services import
 │   └── http_server/            response envelope, request-scoped values
-├── migrations/                 .sql pairs + embed.go compiling them in
+├── schema/                     schema.sql + embed.go compiling it in
 └── sqlc.yaml
 ```
 
 ## Database
 
-Three tables: `ga_users`, `ga_sessions`, `ga_audit_log`.
+Three tables — `ga_users`, `ga_sessions`, `ga_audit_log` — in **goauth's own
+database**. See [Give goauth its own database](#give-goauth-its-own-database).
 
 Queries live in `internal/adapter/postgres/queries/*.sql` and are compiled by
 sqlc into `internal/adapter/postgres/generated/` — never edit that directory,
 and never write raw SQL strings in Go.
 
-The order matters: write the migration, apply it, regenerate. `make generate`
-runs sqlc before wire because wire cannot compile the adapter until the
-generated package exists.
+The order matters: edit `schema/schema.sql`, then regenerate. `make generate`
+runs sqlc before wire because wire cannot compile the adapter until the generated
+package exists.
 
-Migration files are also compiled into the binary by `migrations/embed.go`, and
-applied at startup by `pkg/migrator`. It wraps golang-migrate rather than
-hand-rolling a runner for two reasons: the embedded runner and the `migrate` CLI
-then write the same `schema_migrations` table and cannot disagree about what is
-applied, and the driver's advisory lock makes concurrent replica startup safe.
+`schema/schema.sql` is compiled into the binary by `schema/embed.go` and executed
+at startup by `pkg/dbschema`, under a Postgres advisory lock so concurrent
+replicas do not collide. sqlc validates the queries against the same file, so the
+schema the service creates and the schema the generated code assumes cannot
+drift.
+
+There is no migration tool and no version table. Every statement is idempotent —
+`CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS` — so the file is safe
+to run on every start. **Adding to it later means adding idempotent statements**:
+a bare `CREATE TABLE IF NOT EXISTS` will not add a column to a table that already
+exists, because the whole statement is skipped. Use `ALTER TABLE … ADD COLUMN IF
+NOT EXISTS` for that.
+
+### Retention
+
+Two tables grow on their own, so both are swept by `internal/orchestrators/cron`
+on a plain ticker — no scheduler, no cron library.
+
+`ga_audit_log` is the noisy one: it records every login, every failed login and
+every token refresh, so with a 15-minute access TTL a single active user adds
+roughly four rows an hour, nearly all of them `session.refreshed`. Entries older
+than `AUDIT_RETENTION` are deleted, and `AUDIT_MAX_ROWS` caps the table
+regardless of age.
+
+`ga_sessions` keeps expired rows because rotation marks a session used rather
+than removing it; `SESSION_CLEANUP_INTERVAL` sweeps them. Deleting an expired
+session changes nothing security-wise — `auth_token` checks `expires_at` before
+anything else.
+
+`AUDIT_RETENTION=0` means keep everything. The zero value has to fail safe: read
+the other way, it would silently erase the audit trail of every installation that
+never configured one. A failing sweep is logged and the loop continues —
+housekeeping must not be able to take down a service that is serving correctly.
 
 The adapter maps storage failures onto domain errors — `pgx.ErrNoRows` becomes a
 not-found error, a `23505` unique violation becomes `domain.ErrAlreadyExists` —
@@ -598,7 +752,6 @@ Package names must be globally unique, because wire aliases packages by name:
 | `test` | `go test ./... -race` |
 | `lint` | golangci-lint |
 | `jwt-key` / `admin-token` | generate a credential |
-| `migrate-up` / `migrate-down` | apply or roll back one migration by hand |
 | `docker-up` / `docker-down` | dependencies via compose |
 | `image` | build the container image locally |
 | `image-login` / `image-push` | publish multi-arch to GHCR |

@@ -1,4 +1,4 @@
-package migrator
+package dbschema
 
 import "github.com/google/wire"
 
