@@ -30,7 +30,8 @@ CREATE TABLE IF NOT EXISTS ga_users (
     created_at           timestamptz NOT NULL DEFAULT now(),
     updated_at           timestamptz NOT NULL DEFAULT now(),
 
-    CONSTRAINT ga_users_identifier_present CHECK (username IS NOT NULL OR email IS NOT NULL),
+    CONSTRAINT ga_users_identifier_present
+        CHECK (status = 'deleted' OR username IS NOT NULL OR email IS NOT NULL),
     CONSTRAINT ga_users_status_valid       CHECK (status IN ('active', 'blocked', 'deleted'))
 );
 
@@ -65,3 +66,41 @@ CREATE TABLE IF NOT EXISTS ga_audit_log (
 
 CREATE INDEX IF NOT EXISTS ga_audit_log_target_idx  ON ga_audit_log (target_user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS ga_audit_log_created_idx ON ga_audit_log (created_at DESC);
+
+-- Outbox for webhook delivery.
+--
+-- An event is written in the same transaction as the change it describes, which
+-- is what makes "changed but never announced" impossible. A delivery worker
+-- picks rows up afterwards, so a receiver being down delays events rather than
+-- losing them — and a consumer that believes it is in sync actually is.
+CREATE TABLE IF NOT EXISTS ga_outbox (
+    id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    event           text        NOT NULL,
+    payload         jsonb       NOT NULL,
+    attempts        integer     NOT NULL DEFAULT 0,
+    next_attempt_at timestamptz NOT NULL DEFAULT now(),
+    delivered_at    timestamptz,
+    failed_at       timestamptz,
+    last_error      text,
+    created_at      timestamptz NOT NULL DEFAULT now()
+);
+
+-- Partial index: the worker only ever asks for rows that are still owed.
+-- seq gives events a total order. created_at alone is not enough: two changes
+-- in the same transaction, or within the same clock tick, tie — and a receiver
+-- then sees "unblocked" before "blocked".
+ALTER TABLE ga_outbox ADD COLUMN IF NOT EXISTS seq bigserial;
+
+CREATE INDEX IF NOT EXISTS ga_outbox_due_idx ON ga_outbox (seq)
+    WHERE delivered_at IS NULL AND failed_at IS NULL;
+CREATE INDEX IF NOT EXISTS ga_outbox_created_idx ON ga_outbox (created_at);
+
+-- Idempotent repairs for databases created by an earlier version. A bare
+-- CREATE TABLE IF NOT EXISTS above is skipped entirely once the table exists,
+-- so a changed constraint has to be restated here.
+--
+-- Soft delete clears both identifiers, which the original constraint forbade —
+-- DELETE /admin/users/{id} failed with a check violation on every call.
+ALTER TABLE ga_users DROP CONSTRAINT IF EXISTS ga_users_identifier_present;
+ALTER TABLE ga_users ADD  CONSTRAINT ga_users_identifier_present
+    CHECK (status = 'deleted' OR username IS NOT NULL OR email IS NOT NULL);

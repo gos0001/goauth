@@ -69,6 +69,7 @@ func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) {
 	}
 
 	user, err := uc.postgres.CreateUser(ctx, postgresadapter.CreateUserParams{
+		Event:        &domain.OutboxEvent{Event: domain.EventUserCreated},
 		Username:     username,
 		Email:        email,
 		PasswordHash: hash,

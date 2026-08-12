@@ -87,6 +87,8 @@ func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) {
 		p.Status = &v
 	}
 
+	p.Event = &domain.OutboxEvent{Event: updateEventFor(current, in)}
+
 	// A status change away from active must take effect immediately, so it goes
 	// through the transactional variant that also drops the target's sessions.
 	// Blocking someone whose live sessions keep working is not a block.
@@ -111,6 +113,25 @@ func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) {
 		MustChangePassword: updated.MustChangePassword,
 		UpdatedAt:          updated.UpdatedAt,
 	}, nil
+}
+
+// updateEventFor names the change as specifically as it can. A consumer
+// switching on "user.blocked" should not have to diff two payloads to discover
+// that is what happened; "user.updated" is the fallback for a plain edit.
+func updateEventFor(before domain.User, in Input) string {
+	if in.IsAdmin != nil && *in.IsAdmin != before.IsAdmin {
+		if *in.IsAdmin {
+			return domain.EventAdminGranted
+		}
+		return domain.EventAdminRevoked
+	}
+	if in.Status != nil && domain.UserStatus(*in.Status) != before.Status {
+		if domain.UserStatus(*in.Status) == domain.StatusActive {
+			return domain.EventUserUnblocked
+		}
+		return domain.EventUserBlocked
+	}
+	return domain.EventUserUpdated
 }
 
 func (uc *Usecase) record(ctx context.Context, in Input, before, after domain.User) {

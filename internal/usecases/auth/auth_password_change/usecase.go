@@ -14,7 +14,7 @@ import (
 
 type Postgres interface {
 	GetUserByID(ctx context.Context, id string) (domain.User, error)
-	SetPasswordAndRevokeSessions(ctx context.Context, id, passwordHash string, mustChange bool) (domain.User, error)
+	SetPasswordAndRevokeSessions(ctx context.Context, id, passwordHash string, mustChange bool, ev *domain.OutboxEvent) (domain.User, error)
 }
 
 type Hasher interface {
@@ -74,7 +74,8 @@ func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) {
 		return Output{}, fmt.Errorf("auth_password_change: hash: %w", err)
 	}
 
-	updated, err := uc.postgres.SetPasswordAndRevokeSessions(ctx, user.ID, hash, false)
+	ev := domain.OutboxEvent{Event: domain.EventUserPasswordChanged}
+	updated, err := uc.postgres.SetPasswordAndRevokeSessions(ctx, user.ID, hash, false, &ev)
 	if err != nil {
 		return Output{}, err
 	}

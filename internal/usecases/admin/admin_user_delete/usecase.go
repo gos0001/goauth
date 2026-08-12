@@ -12,7 +12,7 @@ import (
 type Postgres interface {
 	GetUserByID(ctx context.Context, id string) (domain.User, error)
 	CountActiveAdmins(ctx context.Context) (int, error)
-	SoftDeleteUser(ctx context.Context, id string) (domain.User, error)
+	SoftDeleteUser(ctx context.Context, id string, ev *domain.OutboxEvent) (domain.User, error)
 }
 
 type Auditor interface {
@@ -59,7 +59,8 @@ func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) {
 		}
 	}
 
-	deleted, err := uc.postgres.SoftDeleteUser(ctx, user.ID)
+	ev := domain.OutboxEvent{Event: domain.EventUserDeleted}
+	deleted, err := uc.postgres.SoftDeleteUser(ctx, user.ID, &ev)
 	if err != nil {
 		return Output{}, err
 	}

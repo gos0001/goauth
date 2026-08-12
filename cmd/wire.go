@@ -35,6 +35,7 @@ import (
 	"github.com/gos0001/goauth/internal/usecases/seed_super_admin"
 	"github.com/gos0001/goauth/internal/usecases/session_cleaner"
 	"github.com/gos0001/goauth/internal/usecases/sys/sys_health"
+	"github.com/gos0001/goauth/internal/usecases/webhook_dispatcher"
 	"github.com/gos0001/goauth/pkg/dbschema"
 	"github.com/gos0001/goauth/pkg/logger"
 	"github.com/gos0001/goauth/pkg/passwordhash"
@@ -43,6 +44,7 @@ import (
 	"github.com/gos0001/goauth/pkg/realip"
 	pkgredis "github.com/gos0001/goauth/pkg/redis"
 	"github.com/gos0001/goauth/pkg/token"
+	"github.com/gos0001/goauth/pkg/webhook"
 	"github.com/gos0001/goauth/schema"
 	// codegen:imports
 )
@@ -61,6 +63,7 @@ func InitializeApp() (*App, error) {
 		token.Set,
 		realip.Set,
 		ratelimit.Set,
+		webhook.Set,
 
 		// adapters and shared services
 		postgresadapter.Set,
@@ -81,6 +84,7 @@ func InitializeApp() (*App, error) {
 		seed_super_admin.Set,
 		audit_cleaner.Set,
 		session_cleaner.Set,
+		webhook_dispatcher.Set,
 
 		admin_user_create.Set,
 		admin_user_list.Set,

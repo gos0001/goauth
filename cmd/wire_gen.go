@@ -37,6 +37,7 @@ import (
 	"github.com/gos0001/goauth/internal/usecases/seed_super_admin"
 	"github.com/gos0001/goauth/internal/usecases/session_cleaner"
 	"github.com/gos0001/goauth/internal/usecases/sys/sys_health"
+	"github.com/gos0001/goauth/internal/usecases/webhook_dispatcher"
 	"github.com/gos0001/goauth/pkg/dbschema"
 	"github.com/gos0001/goauth/pkg/logger"
 	"github.com/gos0001/goauth/pkg/passwordhash"
@@ -45,6 +46,7 @@ import (
 	"github.com/gos0001/goauth/pkg/realip"
 	"github.com/gos0001/goauth/pkg/redis"
 	"github.com/gos0001/goauth/pkg/token"
+	"github.com/gos0001/goauth/pkg/webhook"
 	"github.com/gos0001/goauth/schema"
 )
 
@@ -96,7 +98,11 @@ func InitializeApp() (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	adapter := postgres2.New(pool)
+	webhookConfig, err := webhook.LoadConfig()
+	if err != nil {
+		return nil, err
+	}
+	adapter := postgres2.New(pool, webhookConfig)
 	middlewareConfig, err := middleware.LoadConfig()
 	if err != nil {
 		return nil, err
@@ -198,7 +204,14 @@ func InitializeApp() (*App, error) {
 		return nil, err
 	}
 	session_cleanerCronJob := session_cleaner.NewCronJob(session_cleanerUsecase, sugaredLogger, session_cleanerConfig)
-	cronCron := cron.New(cronJob, session_cleanerCronJob, sugaredLogger)
+	sender := webhook.New(webhookConfig)
+	webhook_dispatcherConfig, err := webhook_dispatcher.LoadConfig()
+	if err != nil {
+		return nil, err
+	}
+	webhook_dispatcherUsecase := webhook_dispatcher.New(adapter, sender, webhook_dispatcherConfig)
+	webhook_dispatcherCronJob := webhook_dispatcher.NewCronJob(webhook_dispatcherUsecase, sugaredLogger, webhook_dispatcherConfig)
+	cronCron := cron.New(cronJob, session_cleanerCronJob, webhook_dispatcherCronJob, sugaredLogger)
 	mainConfig, err := LoadConfig()
 	if err != nil {
 		return nil, err

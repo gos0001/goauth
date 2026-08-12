@@ -19,6 +19,19 @@ type GaAuditLog struct {
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 }
 
+type GaOutbox struct {
+	ID            uuid.UUID          `json:"id"`
+	Event         string             `json:"event"`
+	Payload       []byte             `json:"payload"`
+	Attempts      int32              `json:"attempts"`
+	NextAttemptAt pgtype.Timestamptz `json:"next_attempt_at"`
+	DeliveredAt   pgtype.Timestamptz `json:"delivered_at"`
+	FailedAt      pgtype.Timestamptz `json:"failed_at"`
+	LastError     pgtype.Text        `json:"last_error"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	Seq           pgtype.Int8        `json:"seq"`
+}
+
 type GaSession struct {
 	ID          uuid.UUID          `json:"id"`
 	UserID      uuid.UUID          `json:"user_id"`

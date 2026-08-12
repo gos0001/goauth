@@ -19,6 +19,7 @@ import (
 	"github.com/gos0001/goauth/internal/adapter/postgres/generated"
 	"github.com/gos0001/goauth/internal/domain"
 	pkgpostgres "github.com/gos0001/goauth/pkg/postgres"
+	"github.com/gos0001/goauth/pkg/webhook"
 )
 
 // uniqueViolation is Postgres' SQLSTATE for a duplicate key.
@@ -27,10 +28,19 @@ const uniqueViolation = "23505"
 type Adapter struct {
 	pool *pkgpostgres.Pool
 	q    *generated.Queries
+
+	// emitEvents gates the outbox. With no webhook configured there is nobody
+	// to deliver to, and writing events anyway would grow a table that is never
+	// drained — retention only prunes rows that were settled.
+	emitEvents bool
 }
 
-func New(pool *pkgpostgres.Pool) *Adapter {
-	return &Adapter{pool: pool, q: generated.New(pool.Pool)}
+func New(pool *pkgpostgres.Pool, webhookCfg webhook.Config) *Adapter {
+	return &Adapter{
+		pool:       pool,
+		q:          generated.New(pool.Pool),
+		emitEvents: webhookCfg.Enabled(),
+	}
 }
 
 // MapError translates a storage error into a domain error. Repository methods

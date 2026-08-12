@@ -12,6 +12,10 @@ import (
 // CreateUserParams carries only what the caller decides; the database supplies
 // id and timestamps. Identifiers arrive already normalised.
 type CreateUserParams struct {
+	// Event is written in the same transaction as the row, so a created user
+	// and the announcement of it cannot disagree. Nil emits nothing.
+	Event *domain.OutboxEvent
+
 	Username           string
 	Email              string
 	PasswordHash       string
@@ -26,18 +30,37 @@ func (a *Adapter) CreateUser(ctx context.Context, p CreateUserParams) (domain.Us
 		status = domain.StatusActive
 	}
 
-	row, err := a.q.CreateUser(ctx, generated.CreateUserParams{
+	arg := generated.CreateUserParams{
 		Username:           text(p.Username),
 		Email:              text(p.Email),
 		PasswordHash:       p.PasswordHash,
 		IsAdmin:            p.IsAdmin,
 		Status:             string(status),
 		MustChangePassword: p.MustChangePassword,
+	}
+
+	// A transaction even though this is one insert: the event has to land with
+	// it or not at all.
+	var out domain.User
+	err := a.withTx(ctx, func(q *generated.Queries) error {
+		row, err := q.CreateUser(ctx, arg)
+		if err != nil {
+			return MapError(err, domain.ErrUserAlreadyExists)
+		}
+		out = toDomainUser(row)
+
+		ev := p.Event
+		if ev != nil {
+			// Filled here rather than by the caller: only now is the id known.
+			filled := domain.NewUserEvent(ev.Event, out)
+			ev = &filled
+		}
+		return a.insertEvent(ctx, q, ev)
 	})
 	if err != nil {
-		return domain.User{}, MapError(err, domain.ErrUserAlreadyExists)
+		return domain.User{}, err
 	}
-	return toDomainUser(row), nil
+	return out, nil
 }
 
 func (a *Adapter) GetUserByID(ctx context.Context, id string) (domain.User, error) {
@@ -74,6 +97,9 @@ func (a *Adapter) GetUserByEmail(ctx context.Context, email string) (domain.User
 // UpdateUserParams uses pointers so that "not supplied" and "set to the zero
 // value" stay distinguishable; a nil field leaves the column untouched.
 type UpdateUserParams struct {
+	// Event is written in the same transaction as the update. Nil emits nothing.
+	Event *domain.OutboxEvent
+
 	ID       string
 	Username *string
 	Email    *string
@@ -98,11 +124,19 @@ func (a *Adapter) UpdateUser(ctx context.Context, p UpdateUserParams) (domain.Us
 		arg.Status = text(string(*p.Status))
 	}
 
-	row, err := a.q.UpdateUser(ctx, arg)
+	var out domain.User
+	err = a.withTx(ctx, func(q *generated.Queries) error {
+		row, err := q.UpdateUser(ctx, arg)
+		if err != nil {
+			return MapError(err, domain.ErrUserNotFound)
+		}
+		out = toDomainUser(row)
+		return a.insertEvent(ctx, q, eventFor(p.Event, out))
+	})
 	if err != nil {
-		return domain.User{}, MapError(err, domain.ErrUserNotFound)
+		return domain.User{}, err
 	}
-	return toDomainUser(row), nil
+	return out, nil
 }
 
 // UpdateUserAndRevokeSessions applies the update and drops every session of the
@@ -135,7 +169,7 @@ func (a *Adapter) UpdateUserAndRevokeSessions(ctx context.Context, p UpdateUserP
 			return MapError(err, nil)
 		}
 		out = toDomainUser(row)
-		return nil
+		return a.insertEvent(ctx, q, eventFor(p.Event, out))
 	})
 	if err != nil {
 		return domain.User{}, err
@@ -163,7 +197,7 @@ func (a *Adapter) SetUserPassword(ctx context.Context, id, passwordHash string, 
 // SetPasswordAndRevokeSessions changes the password and invalidates every
 // existing session. A password change that leaves old sessions alive does not
 // evict whoever the change was meant to evict.
-func (a *Adapter) SetPasswordAndRevokeSessions(ctx context.Context, id, passwordHash string, mustChange bool) (domain.User, error) {
+func (a *Adapter) SetPasswordAndRevokeSessions(ctx context.Context, id, passwordHash string, mustChange bool, ev *domain.OutboxEvent) (domain.User, error) {
 	parsed, err := uuid.Parse(id)
 	if err != nil {
 		return domain.User{}, domain.ErrUserNotFound
@@ -183,7 +217,7 @@ func (a *Adapter) SetPasswordAndRevokeSessions(ctx context.Context, id, password
 			return MapError(err, nil)
 		}
 		out = toDomainUser(row)
-		return nil
+		return a.insertEvent(ctx, q, eventFor(ev, out))
 	})
 	if err != nil {
 		return domain.User{}, err
@@ -194,7 +228,7 @@ func (a *Adapter) SetPasswordAndRevokeSessions(ctx context.Context, id, password
 // SoftDeleteUser marks the row deleted, clears its identifiers, and revokes its
 // sessions. The row itself stays so user_id values held by other services never
 // dangle.
-func (a *Adapter) SoftDeleteUser(ctx context.Context, id string) (domain.User, error) {
+func (a *Adapter) SoftDeleteUser(ctx context.Context, id string, ev *domain.OutboxEvent) (domain.User, error) {
 	parsed, err := uuid.Parse(id)
 	if err != nil {
 		return domain.User{}, domain.ErrUserNotFound
@@ -210,7 +244,7 @@ func (a *Adapter) SoftDeleteUser(ctx context.Context, id string) (domain.User, e
 			return MapError(err, nil)
 		}
 		out = toDomainUser(row)
-		return nil
+		return a.insertEvent(ctx, q, eventFor(ev, out))
 	})
 	if err != nil {
 		return domain.User{}, err
@@ -268,6 +302,17 @@ func (a *Adapter) CountUsers(ctx context.Context, p ListUsersParams) (int, error
 		return 0, MapError(err, nil)
 	}
 	return int(n), nil
+}
+
+// eventFor fills an event's payload from the row as it now stands, so a
+// consumer always receives the post-change state rather than what the caller
+// guessed it would be.
+func eventFor(ev *domain.OutboxEvent, u domain.User) *domain.OutboxEvent {
+	if ev == nil {
+		return nil
+	}
+	filled := domain.NewUserEvent(ev.Event, u)
+	return &filled
 }
 
 func toDomainUser(r generated.GaUser) domain.User {

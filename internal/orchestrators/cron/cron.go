@@ -14,6 +14,7 @@ import (
 
 	"github.com/gos0001/goauth/internal/usecases/audit_cleaner"
 	"github.com/gos0001/goauth/internal/usecases/session_cleaner"
+	"github.com/gos0001/goauth/internal/usecases/webhook_dispatcher"
 )
 
 // Job is what a use case's cron.go adapts it to.
@@ -46,9 +47,14 @@ type Cron struct {
 func New(
 	audit *audit_cleaner.CronJob,
 	sessions *session_cleaner.CronJob,
+	webhooks *webhook_dispatcher.CronJob,
 	logger *zap.SugaredLogger,
 ) *Cron {
-	return &Cron{jobs: []Job{audit, sessions}, logger: logger, firstRun: firstRunDelay}
+	return &Cron{
+		jobs:     []Job{audit, sessions, webhooks},
+		logger:   logger,
+		firstRun: firstRunDelay,
+	}
 }
 
 // Start launches one goroutine per enabled job and returns immediately.
