@@ -38,6 +38,7 @@ import (
 	"github.com/gos0001/goauth/internal/usecases/session_cleaner"
 	"github.com/gos0001/goauth/internal/usecases/sys/sys_health"
 	"github.com/gos0001/goauth/internal/usecases/webhook_dispatcher"
+	"github.com/gos0001/goauth/pkg/cors"
 	"github.com/gos0001/goauth/pkg/dbschema"
 	"github.com/gos0001/goauth/pkg/logger"
 	"github.com/gos0001/goauth/pkg/passwordhash"
@@ -108,6 +109,14 @@ func InitializeApp() (*App, error) {
 		return nil, err
 	}
 	middlewareMiddleware := middleware.New(resolver, limiter, signer, adapter, sugaredLogger, middlewareConfig)
+	corsConfig, err := cors.LoadConfig()
+	if err != nil {
+		return nil, err
+	}
+	corsMiddleware, err := cors.New(corsConfig)
+	if err != nil {
+		return nil, err
+	}
 	limits := http_v1.NewLimits(ratelimitConfig)
 	usecase := sys_health.New(pool, client)
 	httPv1 := sys_health.NewHTTPv1(usecase, sugaredLogger)
@@ -178,7 +187,7 @@ func InitializeApp() (*App, error) {
 	admin_audit_listUsecase := admin_audit_list.New(adapter)
 	admin_audit_listHTTPv1 := admin_audit_list.NewHTTPv1(admin_audit_listUsecase, sugaredLogger)
 	handlers := admin_v1.NewHandlers(admin_user_createHTTPv1, admin_user_listHTTPv1, admin_user_getHTTPv1, admin_user_updateHTTPv1, admin_user_deleteHTTPv1, admin_user_set_passwordHTTPv1, admin_user_sessions_listHTTPv1, admin_user_sessions_revokeHTTPv1, admin_audit_listHTTPv1)
-	engine := http_v1.New(middlewareMiddleware, limits, httPv1, auth_jwksHTTPv1, auth_settingsHTTPv1, auth_tokenHTTPv1, auth_registerHTTPv1, auth_meHTTPv1, session_listHTTPv1, auth_password_changeHTTPv1, auth_revokeHTTPv1, auth_logout_allHTTPv1, handlers)
+	engine := http_v1.New(middlewareMiddleware, corsMiddleware, limits, httPv1, auth_jwksHTTPv1, auth_settingsHTTPv1, auth_tokenHTTPv1, auth_registerHTTPv1, auth_meHTTPv1, session_listHTTPv1, auth_password_changeHTTPv1, auth_revokeHTTPv1, auth_logout_allHTTPv1, handlers)
 	router := admin_v1.NewRouter(middlewareMiddleware, middlewareConfig, handlers)
 	definition := schema.Definition()
 	dbschemaConfig, err := dbschema.LoadConfig()

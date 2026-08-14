@@ -6,7 +6,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/gos0001/goauth)](https://goreportcard.com/report/github.com/gos0001/goauth)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-> **Stable: `v1.3.0`** — `ghcr.io/gos0001/goauth:1`
+> **Stable: `v1.4.0`** — `ghcr.io/gos0001/goauth:1`
 
 Identity service in a container. Users, passwords, sessions, and Ed25519-signed
 JWTs your services verify offline. It answers **who is this user** and nothing
@@ -207,11 +207,18 @@ verification into your code.
 | `ADMIN_REAUTH_WINDOW` | `15m` | password re-entry for destructive admin calls |
 | `APP_ENV` | `development` | `production` for JSON logs |
 | `DB_AUTO_CREATE` / `DB_AUTO_SCHEMA` | `true` | create the database / its tables |
+| `ALLOW_DOMAINS` | — | CORS origins; empty blocks browsers |
 | `TRUSTED_PROXIES` | — | CIDRs, `cloudflare`, or `private` |
 | `CLIENT_IP_HEADER` | — | `CF-Connecting-IP`, `X-Forwarded-For` |
 | `RATELIMIT_LOGIN_IP` / `_PAIR` | `100/15m` / `10/15m` | |
 | `AUDIT_RETENTION` / `AUDIT_MAX_ROWS` | `720h` / `0` | `0` keeps everything |
 | `WEBHOOK_URL` / `_SECRET` / `_API_KEY` | — | empty disables webhooks |
+
+A browser panel or SPA runs on a different origin, so it needs
+`ALLOW_DOMAINS=https://app.example.com` — `https://*.example.com` and `*` also
+work. Empty means no CORS headers and browsers block the call. It governs
+browsers only: `curl` and server-to-server calls are unaffected, so it is not an
+access control.
 
 Behind a proxy, set `TRUSTED_PROXIES` and `CLIENT_IP_HEADER` or rate limiting
 counts the proxy instead of the caller. Empty is the safe default: no forwarding

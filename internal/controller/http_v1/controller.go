@@ -15,6 +15,7 @@ import (
 	"github.com/gos0001/goauth/internal/usecases/auth/auth_token"
 	"github.com/gos0001/goauth/internal/usecases/auth/session_list"
 	"github.com/gos0001/goauth/internal/usecases/sys/sys_health"
+	"github.com/gos0001/goauth/pkg/cors"
 	// codegen:imports
 )
 
@@ -22,6 +23,7 @@ import (
 // Routing only — no business logic, no adapters, no domain types.
 func New(
 	mw *middleware.Middleware,
+	corsMW *cors.Middleware,
 	limits Limits,
 	health *sys_health.HTTPv1,
 	jwks *auth_jwks.HTTPv1,
@@ -37,7 +39,12 @@ func New(
 	// codegen:params
 ) *gin.Engine {
 	r := gin.New()
-	r.Use(gin.Recovery(), mw.RealIP())
+
+	// CORS first: a preflight carries no credentials and needs no client
+	// address, and short-circuiting it here keeps OPTIONS out of the rate
+	// limiter — a page issuing preflights would otherwise spend a user's login
+	// budget before they typed a password.
+	r.Use(gin.Recovery(), corsMW.Handler(), mw.RealIP())
 
 	r.GET("/healthz", health.Handle)
 	r.GET("/.well-known/jwks.json", jwks.Handle)

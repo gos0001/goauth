@@ -82,6 +82,7 @@ logs are shipped somewhere it should not reach.
 | `ADMIN_TOKEN` | — | empty disables that listener entirely |
 | `APP_ENV` | `development` | `production` switches logs to JSON |
 | `DB_AUTO_CREATE` / `DB_AUTO_SCHEMA` | `true` | create the database / its tables |
+| `ALLOW_DOMAINS` | — | CORS origins a browser may call from |
 | `TRUSTED_PROXIES` | — | CIDRs, or `cloudflare`, or `private` |
 | `CLIENT_IP_HEADER` | — | `CF-Connecting-IP`, `X-Real-IP`, `X-Forwarded-For` |
 | `AUDIT_RETENTION` | `720h` | `0` keeps everything |
@@ -90,6 +91,19 @@ logs are shipped somewhere it should not reach.
 `/admin/users` or by a payment webhook. Set `AUTH_REGISTRATION_MODE=open` only
 for genuine self-service signup; when closed, `/auth/register` returns 404 rather
 than advertising that it exists.
+
+## CORS
+
+A panel or SPA is on a different origin from the API, so without `ALLOW_DOMAINS`
+its requests never leave the browser:
+
+```
+ALLOW_DOMAINS=https://app.example.com,https://*.staging.example.com
+```
+
+Each entry is a full origin, scheme included; `*` allows everything. Empty sends
+no CORS headers at all. It is a browser policy, not access control — it does not
+affect curl or server-to-server calls.
 
 ## Behind a proxy
 

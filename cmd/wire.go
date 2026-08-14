@@ -36,6 +36,7 @@ import (
 	"github.com/gos0001/goauth/internal/usecases/session_cleaner"
 	"github.com/gos0001/goauth/internal/usecases/sys/sys_health"
 	"github.com/gos0001/goauth/internal/usecases/webhook_dispatcher"
+	"github.com/gos0001/goauth/pkg/cors"
 	"github.com/gos0001/goauth/pkg/dbschema"
 	"github.com/gos0001/goauth/pkg/logger"
 	"github.com/gos0001/goauth/pkg/passwordhash"
@@ -62,6 +63,7 @@ func InitializeApp() (*App, error) {
 		passwordhash.Set,
 		token.Set,
 		realip.Set,
+		cors.Set,
 		ratelimit.Set,
 		webhook.Set,
 
