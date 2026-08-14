@@ -214,6 +214,7 @@ verification into your code.
 | `JWT_PREVIOUS_PUBLIC_KEYS` | — | retired keys, still published |
 | `AUTH_REGISTRATION_MODE` | `closed` | `closed` or `open` |
 | `AUTH_MIN_PASSWORD_LEN` | `12` | |
+| `AUTH_REGISTRATION_REQUIRE_EMAIL` | `false` | goauth sends no mail and cannot verify one |
 | `SUPER_ADMIN_USERNAME` / `_PASSWORD` / `_EMAIL` | — | seeds the first admin; applied at creation only |
 | `APP_ADDR` / `ADMIN_ADDR` | `:8080` / `127.0.0.1:8081` | |
 | `ADMIN_TOKEN` | — | empty disables the machine listener |
@@ -221,11 +222,21 @@ verification into your code.
 | `APP_ENV` | `development` | `production` for JSON logs |
 | `DB_AUTO_CREATE` / `DB_AUTO_SCHEMA` | `true` | create the database / its tables |
 | `ALLOW_DOMAINS` | — | CORS origins; empty blocks browsers |
+| `CORS_MAX_AGE` | `12h` | how long a browser caches the preflight |
 | `TRUSTED_PROXIES` | — | CIDRs, `cloudflare`, or `private` |
 | `CLIENT_IP_HEADER` | — | `CF-Connecting-IP`, `X-Forwarded-For` |
-| `RATELIMIT_LOGIN_IP` / `_PAIR` | `100/15m` / `10/15m` | |
+| `RATELIMIT_LOGIN_IP` / `_PAIR` / `_REGISTER` | `100/15m` / `10/15m` / `20/1h` | |
+| `RATELIMIT_FAIL_CLOSED` | `true` | Redis down ⇒ refuse logins rather than allow them |
+| `RATELIMIT_BACKOFF_AFTER` / `_BASE` / `_MAX` | `3` / `1s` / `60s` | per-account delay after wrong passwords, not a lock |
+| `RATELIMIT_FAILURE_WINDOW` | `15m` | how long those failures are remembered |
+| `REDIS_KEY_PREFIX` / `REDIS_DEFAULT_TTL` | `goauth:` / `1h` | namespace, so Redis can be shared |
 | `AUDIT_RETENTION` / `AUDIT_MAX_ROWS` | `720h` / `0` | `0` keeps everything |
+| `AUDIT_CLEANUP_INTERVAL` / `SESSION_CLEANUP_INTERVAL` | `6h` / `1h` | |
 | `WEBHOOK_URL` / `_SECRET` / `_API_KEY` | — | empty disables webhooks |
+| `WEBHOOK_INTERVAL` / `_BATCH_SIZE` / `_TIMEOUT` | `10s` / `50` / `10s` | how often the outbox is drained, and how much per run |
+| `WEBHOOK_MAX_ATTEMPTS` / `_BACKOFF_BASE` / `_BACKOFF_MAX` | `10` / `10s` / `1h` | retries before an event is abandoned |
+| `WEBHOOK_RETENTION` | `168h` | how long delivered events are kept |
+| `OUTBOX_MAX_AGE` / `OUTBOX_CLEANUP_INTERVAL` | `720h` / `1h` | when undelivered events are dropped |
 
 A browser panel or SPA runs on a different origin, so it needs
 `ALLOW_DOMAINS=https://app.example.com` — `https://*.example.com` and `*` also
