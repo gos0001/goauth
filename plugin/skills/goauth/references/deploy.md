@@ -18,6 +18,7 @@ services:
       JWT_ISSUER: goauth
       JWT_AUDIENCE: my-app
       SUPER_ADMIN_USERNAME: superadmin
+      SUPER_ADMIN_PASSWORD: ${GOAUTH_ADMIN_PASSWORD:?}
       APP_ENV: production
       # Machine-facing admin listener: reachable at http://auth:8081 from
       # sibling containers, and kept private by not publishing the port.
@@ -54,16 +55,19 @@ same value across restarts and replicas.
 
 ## First login
 
-Leaving `SUPER_ADMIN_PASSWORD` unset makes goauth generate one and print it once,
-on the run that creates the account:
+The admin credentials come from the environment and are used exactly as given:
 
-```bash
-docker compose logs auth | grep 'generated password'
+```
+SUPER_ADMIN_USERNAME=superadmin
+SUPER_ADMIN_PASSWORD=<12+ characters>
 ```
 
-The account carries `must_change_password`, so that value stops working as soon
-as the admin logs in and changes it. Set `SUPER_ADMIN_PASSWORD` explicitly where
-logs are shipped somewhere it should not reach.
+Nothing is generated and nothing is printed to the log. They seed the account
+only when no admin exists, so a password changed later through `/auth/password`
+survives a restart — and recreating the database gives back the same login.
+
+A username with no password fails the boot rather than creating an account
+nobody can sign into.
 
 ## Environment
 
@@ -77,7 +81,7 @@ logs are shipped somewhere it should not reach.
 | `JWT_REFRESH_TTL` | `720h` | |
 | `AUTH_REGISTRATION_MODE` | `closed` | `closed` or `open` |
 | `AUTH_MIN_PASSWORD_LEN` | `12` | |
-| `SUPER_ADMIN_USERNAME` / `_PASSWORD` / `_EMAIL` | — | bootstrap admin |
+| `SUPER_ADMIN_USERNAME` / `_PASSWORD` / `_EMAIL` | — | bootstrap admin, applied at creation only |
 | `ADMIN_ADDR` | `127.0.0.1:8081` | machine-facing admin listener |
 | `ADMIN_TOKEN` | — | empty disables that listener entirely |
 | `APP_ENV` | `development` | `production` switches logs to JSON |

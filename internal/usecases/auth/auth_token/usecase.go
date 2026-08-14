@@ -248,12 +248,11 @@ func statusError(u domain.User) error {
 
 func output(p tokens.Pair, u domain.User) Output {
 	return Output{
-		AccessToken:        p.AccessToken,
-		TokenType:          p.TokenType,
-		ExpiresIn:          p.ExpiresIn,
-		ExpiresAt:          p.ExpiresAt,
-		RefreshToken:       p.RefreshToken,
-		MustChangePassword: u.MustChangePassword,
-		User:               viewOf(u),
+		AccessToken:  p.AccessToken,
+		TokenType:    p.TokenType,
+		ExpiresIn:    p.ExpiresIn,
+		ExpiresAt:    p.ExpiresAt,
+		RefreshToken: p.RefreshToken,
+		User:         viewOf(u),
 	}
 }

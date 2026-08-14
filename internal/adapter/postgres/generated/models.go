@@ -45,14 +45,13 @@ type GaSession struct {
 }
 
 type GaUser struct {
-	ID                 uuid.UUID          `json:"id"`
-	Username           pgtype.Text        `json:"username"`
-	Email              pgtype.Text        `json:"email"`
-	PasswordHash       string             `json:"password_hash"`
-	IsAdmin            bool               `json:"is_admin"`
-	Status             string             `json:"status"`
-	MustChangePassword bool               `json:"must_change_password"`
-	LastLoginAt        pgtype.Timestamptz `json:"last_login_at"`
-	CreatedAt          pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	ID           uuid.UUID          `json:"id"`
+	Username     pgtype.Text        `json:"username"`
+	Email        pgtype.Text        `json:"email"`
+	PasswordHash string             `json:"password_hash"`
+	IsAdmin      bool               `json:"is_admin"`
+	Status       string             `json:"status"`
+	LastLoginAt  pgtype.Timestamptz `json:"last_login_at"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }

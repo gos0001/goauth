@@ -16,12 +16,11 @@ type CreateUserParams struct {
 	// and the announcement of it cannot disagree. Nil emits nothing.
 	Event *domain.OutboxEvent
 
-	Username           string
-	Email              string
-	PasswordHash       string
-	IsAdmin            bool
-	Status             domain.UserStatus
-	MustChangePassword bool
+	Username     string
+	Email        string
+	PasswordHash string
+	IsAdmin      bool
+	Status       domain.UserStatus
 }
 
 func (a *Adapter) CreateUser(ctx context.Context, p CreateUserParams) (domain.User, error) {
@@ -31,12 +30,11 @@ func (a *Adapter) CreateUser(ctx context.Context, p CreateUserParams) (domain.Us
 	}
 
 	arg := generated.CreateUserParams{
-		Username:           text(p.Username),
-		Email:              text(p.Email),
-		PasswordHash:       p.PasswordHash,
-		IsAdmin:            p.IsAdmin,
-		Status:             string(status),
-		MustChangePassword: p.MustChangePassword,
+		Username:     text(p.Username),
+		Email:        text(p.Email),
+		PasswordHash: p.PasswordHash,
+		IsAdmin:      p.IsAdmin,
+		Status:       string(status),
 	}
 
 	// A transaction even though this is one insert: the event has to land with
@@ -177,16 +175,15 @@ func (a *Adapter) UpdateUserAndRevokeSessions(ctx context.Context, p UpdateUserP
 	return out, nil
 }
 
-func (a *Adapter) SetUserPassword(ctx context.Context, id, passwordHash string, mustChange bool) (domain.User, error) {
+func (a *Adapter) SetUserPassword(ctx context.Context, id, passwordHash string) (domain.User, error) {
 	parsed, err := uuid.Parse(id)
 	if err != nil {
 		return domain.User{}, domain.ErrUserNotFound
 	}
 
 	row, err := a.q.SetUserPassword(ctx, generated.SetUserPasswordParams{
-		ID:                 parsed,
-		PasswordHash:       passwordHash,
-		MustChangePassword: mustChange,
+		ID:           parsed,
+		PasswordHash: passwordHash,
 	})
 	if err != nil {
 		return domain.User{}, MapError(err, domain.ErrUserNotFound)
@@ -197,7 +194,7 @@ func (a *Adapter) SetUserPassword(ctx context.Context, id, passwordHash string, 
 // SetPasswordAndRevokeSessions changes the password and invalidates every
 // existing session. A password change that leaves old sessions alive does not
 // evict whoever the change was meant to evict.
-func (a *Adapter) SetPasswordAndRevokeSessions(ctx context.Context, id, passwordHash string, mustChange bool, ev *domain.OutboxEvent) (domain.User, error) {
+func (a *Adapter) SetPasswordAndRevokeSessions(ctx context.Context, id, passwordHash string, ev *domain.OutboxEvent) (domain.User, error) {
 	parsed, err := uuid.Parse(id)
 	if err != nil {
 		return domain.User{}, domain.ErrUserNotFound
@@ -206,9 +203,8 @@ func (a *Adapter) SetPasswordAndRevokeSessions(ctx context.Context, id, password
 	var out domain.User
 	err = a.withTx(ctx, func(q *generated.Queries) error {
 		row, err := q.SetUserPassword(ctx, generated.SetUserPasswordParams{
-			ID:                 parsed,
-			PasswordHash:       passwordHash,
-			MustChangePassword: mustChange,
+			ID:           parsed,
+			PasswordHash: passwordHash,
 		})
 		if err != nil {
 			return MapError(err, domain.ErrUserNotFound)
@@ -317,15 +313,14 @@ func eventFor(ev *domain.OutboxEvent, u domain.User) *domain.OutboxEvent {
 
 func toDomainUser(r generated.GaUser) domain.User {
 	return domain.User{
-		ID:                 uuidText(r.ID),
-		Username:           textOut(r.Username),
-		Email:              textOut(r.Email),
-		PasswordHash:       r.PasswordHash,
-		IsAdmin:            r.IsAdmin,
-		Status:             domain.UserStatus(r.Status),
-		MustChangePassword: r.MustChangePassword,
-		LastLoginAt:        tsOutPtr(r.LastLoginAt),
-		CreatedAt:          tsOut(r.CreatedAt),
-		UpdatedAt:          tsOut(r.UpdatedAt),
+		ID:           uuidText(r.ID),
+		Username:     textOut(r.Username),
+		Email:        textOut(r.Email),
+		PasswordHash: r.PasswordHash,
+		IsAdmin:      r.IsAdmin,
+		Status:       domain.UserStatus(r.Status),
+		LastLoginAt:  tsOutPtr(r.LastLoginAt),
+		CreatedAt:    tsOut(r.CreatedAt),
+		UpdatedAt:    tsOut(r.UpdatedAt),
 	}
 }

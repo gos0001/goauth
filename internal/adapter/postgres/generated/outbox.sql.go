@@ -97,6 +97,22 @@ func (q *Queries) DeleteOutboxEventsBefore(ctx context.Context, createdAt pgtype
 	return result.RowsAffected(), nil
 }
 
+const deleteStuckOutboxEvents = `-- name: DeleteStuckOutboxEvents :execrows
+DELETE FROM ga_outbox
+WHERE created_at < $1 AND delivered_at IS NULL AND failed_at IS NULL
+`
+
+// The counterpart to DeleteOutboxEventsBefore: rows that were never delivered
+// and never given up on. Nothing settles these when delivery is switched off, so
+// a hard age ceiling is the only thing that bounds them.
+func (q *Queries) DeleteStuckOutboxEvents(ctx context.Context, createdAt pgtype.Timestamptz) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteStuckOutboxEvents, createdAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const insertOutboxEvent = `-- name: InsertOutboxEvent :exec
 INSERT INTO ga_outbox (event, payload) VALUES ($1, $2)
 `

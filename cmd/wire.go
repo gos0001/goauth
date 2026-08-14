@@ -32,6 +32,7 @@ import (
 	"github.com/gos0001/goauth/internal/usecases/auth/auth_settings"
 	"github.com/gos0001/goauth/internal/usecases/auth/auth_token"
 	"github.com/gos0001/goauth/internal/usecases/auth/session_list"
+	"github.com/gos0001/goauth/internal/usecases/outbox_cleaner"
 	"github.com/gos0001/goauth/internal/usecases/seed_super_admin"
 	"github.com/gos0001/goauth/internal/usecases/session_cleaner"
 	"github.com/gos0001/goauth/internal/usecases/sys/sys_health"
@@ -86,6 +87,7 @@ func InitializeApp() (*App, error) {
 		seed_super_admin.Set,
 		audit_cleaner.Set,
 		session_cleaner.Set,
+		outbox_cleaner.Set,
 		webhook_dispatcher.Set,
 
 		admin_user_create.Set,

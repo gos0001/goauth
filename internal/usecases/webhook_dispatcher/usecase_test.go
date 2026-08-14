@@ -14,7 +14,6 @@ type fakePostgres struct {
 
 	delivered []string
 	failed    []failure
-	pruned    int
 }
 
 type failure struct {
@@ -43,10 +42,6 @@ func (f *fakePostgres) MarkOutboxFailed(_ context.Context, id, reason string, ne
 	return nil
 }
 
-func (f *fakePostgres) DeleteOutboxEventsBefore(_ context.Context, _ time.Time) (int, error) {
-	return f.pruned, nil
-}
-
 type fakeSender struct {
 	enabled bool
 	err     error
@@ -72,7 +67,7 @@ func defaultConfig() Config {
 	return Config{
 		Interval: time.Second, BatchSize: 50, MaxAttempts: 3,
 		BackoffBase: time.Second, BackoffMax: time.Hour,
-		Retention: time.Hour, Timeout: time.Second,
+		Timeout: time.Second,
 	}
 }
 

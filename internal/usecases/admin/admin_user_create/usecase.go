@@ -49,10 +49,6 @@ func New(pg *postgresadapter.Adapter, hasher *passwordhash.Hasher, auditor *audi
 // Execute provisions an account on someone's behalf. This is how users are
 // created when registration is closed — by an operator, or by a payment webhook
 // calling the private port after a purchase.
-//
-// MustChangePassword defaults to true: the operator knows the password they
-// just set, so leaving it in place would mean an account whose credentials two
-// people hold.
 func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) {
 	var (
 		username, email string
@@ -88,13 +84,12 @@ func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) {
 	}
 
 	user, err := uc.postgres.CreateUser(ctx, postgresadapter.CreateUserParams{
-		Event:              &domain.OutboxEvent{Event: domain.EventUserCreated},
-		Username:           username,
-		Email:              email,
-		PasswordHash:       hash,
-		IsAdmin:            in.IsAdmin,
-		Status:             status,
-		MustChangePassword: in.MustChangePassword,
+		Event:        &domain.OutboxEvent{Event: domain.EventUserCreated},
+		Username:     username,
+		Email:        email,
+		PasswordHash: hash,
+		IsAdmin:      in.IsAdmin,
+		Status:       status,
 	})
 	if err != nil {
 		return Output{}, err
@@ -108,13 +103,12 @@ func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) {
 	}
 
 	return Output{
-		ID:                 user.ID,
-		Username:           user.Username,
-		Email:              user.Email,
-		IsAdmin:            user.IsAdmin,
-		Status:             string(user.Status),
-		MustChangePassword: user.MustChangePassword,
-		CreatedAt:          user.CreatedAt,
+		ID:        user.ID,
+		Username:  user.Username,
+		Email:     user.Email,
+		IsAdmin:   user.IsAdmin,
+		Status:    string(user.Status),
+		CreatedAt: user.CreatedAt,
 	}, nil
 }
 
@@ -125,21 +119,11 @@ type Input struct {
 	IsAdmin  bool   `json:"is_admin"`
 	Status   string `json:"status"`
 
-	// MustChangePassword is a pointer so an explicit false is distinguishable
-	// from an omitted field; omitted means true.
-	MustChangePassword bool  `json:"-"`
-	RawMustChange      *bool `json:"must_change_password"`
-
 	Actor string `json:"-"`
 	IP    string `json:"-"`
 }
 
 func (in *Input) Validate() error {
-	in.MustChangePassword = true
-	if in.RawMustChange != nil {
-		in.MustChangePassword = *in.RawMustChange
-	}
-
 	if in.Password == "" {
 		return domain.ErrPasswordTooWeak
 	}
@@ -152,11 +136,10 @@ func (in *Input) Validate() error {
 }
 
 type Output struct {
-	ID                 string    `json:"id"`
-	Username           string    `json:"username,omitempty"`
-	Email              string    `json:"email,omitempty"`
-	IsAdmin            bool      `json:"is_admin"`
-	Status             string    `json:"status"`
-	MustChangePassword bool      `json:"must_change_password"`
-	CreatedAt          time.Time `json:"created_at"`
+	ID        string    `json:"id"`
+	Username  string    `json:"username,omitempty"`
+	Email     string    `json:"email,omitempty"`
+	IsAdmin   bool      `json:"is_admin"`
+	Status    string    `json:"status"`
+	CreatedAt time.Time `json:"created_at"`
 }

@@ -30,14 +30,13 @@ func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) {
 	}
 
 	return Output{
-		ID:                 user.ID,
-		Username:           user.Username,
-		Email:              user.Email,
-		IsAdmin:            user.IsAdmin,
-		Status:             string(user.Status),
-		MustChangePassword: user.MustChangePassword,
-		LastLoginAt:        user.LastLoginAt,
-		CreatedAt:          user.CreatedAt,
+		ID:          user.ID,
+		Username:    user.Username,
+		Email:       user.Email,
+		IsAdmin:     user.IsAdmin,
+		Status:      string(user.Status),
+		LastLoginAt: user.LastLoginAt,
+		CreatedAt:   user.CreatedAt,
 	}, nil
 }
 
@@ -46,12 +45,11 @@ type Input struct {
 }
 
 type Output struct {
-	ID                 string     `json:"id"`
-	Username           string     `json:"username,omitempty"`
-	Email              string     `json:"email,omitempty"`
-	IsAdmin            bool       `json:"is_admin"`
-	Status             string     `json:"status"`
-	MustChangePassword bool       `json:"must_change_password"`
-	LastLoginAt        *time.Time `json:"last_login_at,omitempty"`
-	CreatedAt          time.Time  `json:"created_at"`
+	ID          string     `json:"id"`
+	Username    string     `json:"username,omitempty"`
+	Email       string     `json:"email,omitempty"`
+	IsAdmin     bool       `json:"is_admin"`
+	Status      string     `json:"status"`
+	LastLoginAt *time.Time `json:"last_login_at,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
 }

@@ -6,7 +6,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/gos0001/goauth)](https://goreportcard.com/report/github.com/gos0001/goauth)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-> **Stable: `v1.4.0`** — `ghcr.io/gos0001/goauth:1`
+> **Stable: `v1.4.1`** — `ghcr.io/gos0001/goauth:1`
 
 Identity service in a container. Users, passwords, sessions, and Ed25519-signed
 JWTs your services verify offline. It answers **who is this user** and nothing
@@ -46,6 +46,7 @@ services:
       JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY:?}
       JWT_AUDIENCE: my-app
       SUPER_ADMIN_USERNAME: superadmin
+      SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD:?}
       APP_ENV: production
     ports: ["8080:8080"]
     depends_on:
@@ -61,11 +62,14 @@ volumes:
 cat > .env <<EOF
 POSTGRES_PASSWORD=$(openssl rand -hex 24)
 JWT_PRIVATE_KEY=$(openssl rand -base64 32)
+SUPER_ADMIN_PASSWORD=<your admin password, 12+ chars>
 EOF
 
 docker compose up -d
-docker compose logs auth | grep 'generated password'   # shown once
 ```
+
+The admin credentials are whatever you put in `.env` — nothing is generated and
+nothing is printed. Recreate the database and the same login still works.
 
 Three things to know:
 
@@ -172,6 +176,11 @@ X-Goauth-Event-Id:  <uuid>          # stable across retries — deduplicate on i
 X-Goauth-Attempt:   1
 ```
 
+Delivered events are kept for `WEBHOOK_RETENTION` (7 days) and then removed.
+Events nothing ever delivered — because delivery was switched off, or never ran —
+are abandoned after `OUTBOX_MAX_AGE` (30 days), so the table cannot grow
+unbounded either way.
+
 Verify with `WEBHOOK_SECRET`; `pkg/webhook.Verify` is exported for Go receivers.
 The timestamp is inside the signature so a captured request cannot be replayed.
 `WEBHOOK_API_KEY` adds a plain `X-Goauth-Api-Key` header for gateways that filter
@@ -201,7 +210,7 @@ verification into your code.
 | `JWT_PREVIOUS_PUBLIC_KEYS` | — | retired keys, still published |
 | `AUTH_REGISTRATION_MODE` | `closed` | `closed` or `open` |
 | `AUTH_MIN_PASSWORD_LEN` | `12` | |
-| `SUPER_ADMIN_USERNAME` / `_PASSWORD` / `_EMAIL` | — | empty password is generated once |
+| `SUPER_ADMIN_USERNAME` / `_PASSWORD` / `_EMAIL` | — | seeds the first admin; applied at creation only |
 | `APP_ADDR` / `ADMIN_ADDR` | `:8080` / `127.0.0.1:8081` | |
 | `ADMIN_TOKEN` | — | empty disables the machine listener |
 | `ADMIN_REAUTH_WINDOW` | `15m` | password re-entry for destructive admin calls |

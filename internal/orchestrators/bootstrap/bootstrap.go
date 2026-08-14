@@ -56,18 +56,8 @@ func (b *Bootstrap) seedSuperAdmin(ctx context.Context) error {
 	}
 
 	switch {
-	case out.Created && out.GeneratedPassword != "":
-		// Printed exactly once, on the run that created the account. The
-		// account carries must_change_password, so this value stops working the
-		// moment the real admin logs in — but it does land in the container
-		// logs, so set SUPER_ADMIN_PASSWORD explicitly where logs are shipped
-		// somewhere you would rather it not reach.
-		b.logger.Warnw("bootstrap administrator created with a generated password — shown once, change it on first login",
-			"identifier", out.Identifier,
-			"password", out.GeneratedPassword,
-			"user_id", out.UserID)
 	case out.Created:
-		b.logger.Warnw("bootstrap administrator created — log in and change the password immediately",
+		b.logger.Infow("bootstrap administrator created",
 			"identifier", out.Identifier, "user_id", out.UserID)
 	case out.Skipped:
 		b.logger.Infow("super admin seed skipped", "reason", out.Reason)

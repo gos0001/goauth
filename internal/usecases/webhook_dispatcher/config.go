@@ -23,10 +23,6 @@ type Config struct {
 	BackoffBase time.Duration `envconfig:"WEBHOOK_BACKOFF_BASE" default:"10s"`
 	BackoffMax  time.Duration `envconfig:"WEBHOOK_BACKOFF_MAX"  default:"1h"`
 
-	// Retention removes settled rows — delivered or given up on. Pending events
-	// are never pruned, however old.
-	Retention time.Duration `envconfig:"WEBHOOK_RETENTION" default:"168h"`
-
 	// Timeout mirrors the sender's, used to size the claim lease.
 	Timeout time.Duration `envconfig:"WEBHOOK_TIMEOUT" default:"10s"`
 }

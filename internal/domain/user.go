@@ -32,10 +32,9 @@ type User struct {
 	Username string
 	Email    string
 
-	PasswordHash       string
-	IsAdmin            bool
-	Status             UserStatus
-	MustChangePassword bool
+	PasswordHash string
+	IsAdmin      bool
+	Status       UserStatus
 
 	LastLoginAt *time.Time
 	CreatedAt   time.Time
@@ -61,9 +60,8 @@ var (
 	// wrong password. Distinguishing them would disclose which accounts exist.
 	ErrInvalidCredentials = errors.New("invalid credentials")
 
-	ErrUserBlocked        = errors.New("user is blocked")
-	ErrUserDeleted        = errors.New("user is deleted")
-	ErrMustChangePassword = errors.New("password change required")
+	ErrUserBlocked = errors.New("user is blocked")
+	ErrUserDeleted = errors.New("user is deleted")
 
 	ErrPasswordTooWeak    = errors.New("password too weak")
 	ErrInvalidIdentifier  = errors.New("invalid identifier")

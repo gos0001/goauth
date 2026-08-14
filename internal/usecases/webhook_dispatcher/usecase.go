@@ -21,7 +21,6 @@ type Postgres interface {
 	ClaimDueOutboxEvents(ctx context.Context, limit int, lease time.Duration) ([]domain.OutboxEvent, error)
 	MarkOutboxDelivered(ctx context.Context, id string) error
 	MarkOutboxFailed(ctx context.Context, id, reason string, nextAttempt time.Time, giveUp bool) error
-	DeleteOutboxEventsBefore(ctx context.Context, cutoff time.Time) (int, error)
 }
 
 type Sender interface {
@@ -39,7 +38,9 @@ func New(pg *postgresadapter.Adapter, sender *webhook.Sender, cfg Config) *Useca
 	return &Usecase{postgres: pg, sender: sender, cfg: cfg}
 }
 
-// Execute delivers one batch and prunes settled rows.
+// Execute delivers one batch. Removing rows afterwards belongs to
+// outbox_cleaner: pruning here only ever ran when a webhook was configured, so
+// switching webhooks off left the table with nothing able to clean it.
 //
 // It never returns an error for a receiver that rejected an event — that is
 // recorded against the row and retried later. An error here means the outbox
@@ -85,14 +86,6 @@ func (uc *Usecase) Execute(ctx context.Context, _ Input) (Output, error) {
 		}
 	}
 
-	if uc.cfg.Retention > 0 {
-		n, err := uc.postgres.DeleteOutboxEventsBefore(ctx, time.Now().Add(-uc.cfg.Retention))
-		if err != nil {
-			return out, fmt.Errorf("webhook_dispatcher: prune: %w", err)
-		}
-		out.Pruned = n
-	}
-
 	return out, nil
 }
 
@@ -116,7 +109,6 @@ type Output struct {
 	Delivered int
 	Failed    int
 	GaveUp    int
-	Pruned    int
 }
 
 func (o Output) Touched() int { return o.Delivered + o.Failed + o.GaveUp }

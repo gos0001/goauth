@@ -34,6 +34,7 @@ import (
 	"github.com/gos0001/goauth/internal/usecases/auth/auth_settings"
 	"github.com/gos0001/goauth/internal/usecases/auth/auth_token"
 	"github.com/gos0001/goauth/internal/usecases/auth/session_list"
+	"github.com/gos0001/goauth/internal/usecases/outbox_cleaner"
 	"github.com/gos0001/goauth/internal/usecases/seed_super_admin"
 	"github.com/gos0001/goauth/internal/usecases/session_cleaner"
 	"github.com/gos0001/goauth/internal/usecases/sys/sys_health"
@@ -219,8 +220,14 @@ func InitializeApp() (*App, error) {
 		return nil, err
 	}
 	webhook_dispatcherUsecase := webhook_dispatcher.New(adapter, sender, webhook_dispatcherConfig)
-	webhook_dispatcherCronJob := webhook_dispatcher.NewCronJob(webhook_dispatcherUsecase, sugaredLogger, webhook_dispatcherConfig)
-	cronCron := cron.New(cronJob, session_cleanerCronJob, webhook_dispatcherCronJob, sugaredLogger)
+	webhook_dispatcherCronJob := webhook_dispatcher.NewCronJob(webhook_dispatcherUsecase, sender, sugaredLogger, webhook_dispatcherConfig)
+	outbox_cleanerConfig, err := outbox_cleaner.LoadConfig()
+	if err != nil {
+		return nil, err
+	}
+	outbox_cleanerUsecase := outbox_cleaner.New(adapter, outbox_cleanerConfig)
+	outbox_cleanerCronJob := outbox_cleaner.NewCronJob(outbox_cleanerUsecase, sugaredLogger, outbox_cleanerConfig)
+	cronCron := cron.New(cronJob, session_cleanerCronJob, webhook_dispatcherCronJob, outbox_cleanerCronJob, sugaredLogger)
 	mainConfig, err := LoadConfig()
 	if err != nil {
 		return nil, err

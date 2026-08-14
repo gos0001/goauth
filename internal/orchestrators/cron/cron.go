@@ -13,6 +13,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/gos0001/goauth/internal/usecases/audit_cleaner"
+	"github.com/gos0001/goauth/internal/usecases/outbox_cleaner"
 	"github.com/gos0001/goauth/internal/usecases/session_cleaner"
 	"github.com/gos0001/goauth/internal/usecases/webhook_dispatcher"
 )
@@ -48,10 +49,11 @@ func New(
 	audit *audit_cleaner.CronJob,
 	sessions *session_cleaner.CronJob,
 	webhooks *webhook_dispatcher.CronJob,
+	outbox *outbox_cleaner.CronJob,
 	logger *zap.SugaredLogger,
 ) *Cron {
 	return &Cron{
-		jobs:     []Job{audit, sessions, webhooks},
+		jobs:     []Job{audit, sessions, webhooks, outbox},
 		logger:   logger,
 		firstRun: firstRunDelay,
 	}

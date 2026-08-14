@@ -56,12 +56,6 @@ type Output struct {
 	ExpiresAt    time.Time `json:"expires_at"`
 	RefreshToken string    `json:"refresh_token"`
 
-	// MustChangePassword tells the client to route straight to the change-password
-	// screen. Tokens are still issued, because /auth/password needs a bearer
-	// token to be callable at all — withholding them would make the required
-	// change impossible to perform.
-	MustChangePassword bool `json:"must_change_password"`
-
 	User UserView `json:"user"`
 }
 

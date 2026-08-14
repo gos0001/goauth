@@ -8,8 +8,6 @@ package seed_super_admin
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"errors"
 	"fmt"
 
@@ -49,17 +47,22 @@ func New(pg *postgresadapter.Adapter, hasher *passwordhash.Hasher, auditor *audi
 // latter would create a second admin every time the first one is renamed and
 // the service restarted.
 //
-// must_change_password is forced on and is not configurable. The bootstrap
-// password is visible in the process environment, in `docker inspect`, in shell
-// history and in CI logs; it must not survive first login.
+// The credentials come from the environment and are used exactly as given —
+// nothing is generated and nothing is printed. They apply only when there is no
+// admin yet: afterwards the password lives in the database, so a change through
+// /auth/password survives a restart rather than being reset from the
+// environment on the next boot.
 func (uc *Usecase) Execute(ctx context.Context, _ Input) (Output, error) {
 	if !uc.cfg.Enabled() {
 		return Output{Skipped: true, Reason: "not configured"}, nil
 	}
 
-	password, generated, err := uc.password()
-	if err != nil {
-		return Output{}, err
+	// Checked before anything touches the database: an account nobody can sign
+	// into is worse than a service that refuses to start and says why.
+	if err := domain.ValidatePassword(uc.cfg.Password, uc.cfg.MinPasswordLength); err != nil {
+		return Output{}, fmt.Errorf(
+			"seed_super_admin: SUPER_ADMIN_PASSWORD is required alongside SUPER_ADMIN_USERNAME "+
+				"and must be at least %d characters: %w", uc.cfg.MinPasswordLength, err)
 	}
 
 	admins, err := uc.postgres.CountActiveAdmins(ctx)
@@ -82,19 +85,18 @@ func (uc *Usecase) Execute(ctx context.Context, _ Input) (Output, error) {
 		}
 	}
 
-	hash, err := uc.hasher.Hash(password)
+	hash, err := uc.hasher.Hash(uc.cfg.Password)
 	if err != nil {
 		return Output{}, fmt.Errorf("seed_super_admin: hash password: %w", err)
 	}
 
 	user, err := uc.postgres.CreateUser(ctx, postgresadapter.CreateUserParams{
-		Event:              &domain.OutboxEvent{Event: domain.EventUserCreated},
-		Username:           username,
-		Email:              email,
-		PasswordHash:       hash,
-		IsAdmin:            true,
-		Status:             domain.StatusActive,
-		MustChangePassword: true,
+		Event:        &domain.OutboxEvent{Event: domain.EventUserCreated},
+		Username:     username,
+		Email:        email,
+		PasswordHash: hash,
+		IsAdmin:      true,
+		Status:       domain.StatusActive,
 	})
 	if err != nil {
 		// The admin-count check and this insert are not one atomic step, so two
@@ -113,55 +115,11 @@ func (uc *Usecase) Execute(ctx context.Context, _ Input) (Output, error) {
 	uc.auditor.Record(ctx, audit.Event(domain.ActorSystem, domain.ActionAdminGranted, user.ID, "",
 		map[string]any{"bootstrap": true}))
 
-	out := Output{
+	return Output{
 		Created:    true,
 		UserID:     user.ID,
 		Identifier: user.Identifier(),
-	}
-	if generated {
-		// Handed back rather than logged here: the use case has no logger, and
-		// the caller is the only layer that knows this is a first boot worth
-		// announcing.
-		out.GeneratedPassword = password
-	}
-
-	return out, nil
-}
-
-// password returns the bootstrap password and whether it had to be invented.
-//
-// An empty SUPER_ADMIN_PASSWORD means "generate one" — that is what makes
-// `docker run` against an empty database produce a usable installation without
-// a secret being thought up first. An explicitly supplied password still has to
-// clear the length floor, which exists to stop `admin123`; a generated one is
-// far past it by construction.
-func (uc *Usecase) password() (string, bool, error) {
-	if uc.cfg.Password != "" {
-		if err := domain.ValidatePassword(uc.cfg.Password, uc.cfg.MinPasswordLength); err != nil {
-			// Refusing to boot beats booting with a guessable administrator.
-			return "", false, fmt.Errorf("seed_super_admin: SUPER_ADMIN_PASSWORD must be at least %d characters: %w",
-				uc.cfg.MinPasswordLength, err)
-		}
-		return uc.cfg.Password, false, nil
-	}
-
-	generated, err := generatePassword()
-	if err != nil {
-		return "", false, err
-	}
-	return generated, true, nil
-}
-
-// generatedPasswordBytes yields a 24-character URL-safe string — 144 bits of
-// entropy, and still short enough to copy out of a log line by hand.
-const generatedPasswordBytes = 18
-
-func generatePassword() (string, error) {
-	buf := make([]byte, generatedPasswordBytes)
-	if _, err := rand.Read(buf); err != nil {
-		return "", fmt.Errorf("seed_super_admin: generate password: %w", err)
-	}
-	return base64.RawURLEncoding.EncodeToString(buf), nil
+	}, nil
 }
 
 type Input struct{}
@@ -172,8 +130,4 @@ type Output struct {
 	Reason     string
 	UserID     string
 	Identifier string
-
-	// GeneratedPassword is set only when the password was invented on this run,
-	// so the caller can print it exactly once — at creation, never on a restart.
-	GeneratedPassword string
 }

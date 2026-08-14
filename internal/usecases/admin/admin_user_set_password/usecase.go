@@ -24,7 +24,7 @@ func LoadConfig() (Config, error) {
 
 type Postgres interface {
 	GetUserByID(ctx context.Context, id string) (domain.User, error)
-	SetPasswordAndRevokeSessions(ctx context.Context, id, passwordHash string, mustChange bool, ev *domain.OutboxEvent) (domain.User, error)
+	SetPasswordAndRevokeSessions(ctx context.Context, id, passwordHash string, ev *domain.OutboxEvent) (domain.User, error)
 }
 
 type Hasher interface {
@@ -52,11 +52,13 @@ func New(pg *postgresadapter.Adapter, hasher *passwordhash.Hasher, auditor *audi
 // This is the most dangerous operation in the service: whoever calls it can
 // then log in as the target. Three things contain that:
 //
-//   - must_change_password is forced on, so the temporary password stops
-//     working the moment the real user logs in
 //   - every existing session of the target is revoked, so the change cannot be
 //     used to quietly join an existing session
 //   - the call is always audited with the acting admin's id
+//
+// Note what is missing: nothing stops the admin from signing in as the target
+// afterwards, and the owner has no signal that it happened. A one-time reset
+// link would fix that, and needs mail delivery the service does not have.
 //
 // When a Mailer is added, this should be replaced by a one-time reset link that
 // only the account owner can act on, and this endpoint removed.
@@ -76,7 +78,7 @@ func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) {
 	}
 
 	ev := domain.OutboxEvent{Event: domain.EventUserPasswordChanged}
-	updated, err := uc.postgres.SetPasswordAndRevokeSessions(ctx, user.ID, hash, true, &ev)
+	updated, err := uc.postgres.SetPasswordAndRevokeSessions(ctx, user.ID, hash, &ev)
 	if err != nil {
 		return Output{}, err
 	}
@@ -84,9 +86,8 @@ func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) {
 	uc.auditor.Record(ctx, audit.Event(in.Actor, domain.ActionPasswordSetByAdmin, updated.ID, in.IP, nil))
 
 	return Output{
-		ID:                 updated.ID,
-		MustChangePassword: updated.MustChangePassword,
-		SessionsRevoked:    true,
+		ID:              updated.ID,
+		SessionsRevoked: true,
 	}, nil
 }
 
@@ -109,7 +110,6 @@ func (in *Input) Validate() error {
 }
 
 type Output struct {
-	ID                 string `json:"id"`
-	MustChangePassword bool   `json:"must_change_password"`
-	SessionsRevoked    bool   `json:"sessions_revoked"`
+	ID              string `json:"id"`
+	SessionsRevoked bool   `json:"sessions_revoked"`
 }

@@ -25,12 +25,11 @@ func (f *fakePostgres) CreateUser(_ context.Context, p postgresadapter.CreateUse
 	f.created = append(f.created, p)
 	f.activeAdmins++
 	return domain.User{
-		ID:                 "seeded-1",
-		Username:           p.Username,
-		Email:              p.Email,
-		IsAdmin:            p.IsAdmin,
-		Status:             p.Status,
-		MustChangePassword: p.MustChangePassword,
+		ID:       "seeded-1",
+		Username: p.Username,
+		Email:    p.Email,
+		IsAdmin:  p.IsAdmin,
+		Status:   p.Status,
 	}, nil
 }
 
@@ -70,11 +69,6 @@ func TestSeedsOnEmptyInstallation(t *testing.T) {
 	got := pg.created[0]
 	if !got.IsAdmin {
 		t.Error("the seeded user is not an admin")
-	}
-	// The bootstrap password is visible in the environment, in `docker inspect`
-	// and in CI logs, so it must not survive first login.
-	if !got.MustChangePassword {
-		t.Error("must_change_password was not forced on the bootstrap account")
 	}
 	if got.Username != "superadmin" {
 		t.Errorf("username = %q, want superadmin", got.Username)
@@ -130,66 +124,34 @@ func TestSkipsWhenNotConfigured(t *testing.T) {
 	}
 }
 
-// An empty SUPER_ADMIN_PASSWORD is the zero-configuration path: the service
-// invents one so `docker run` against an empty database yields a usable
-// installation.
-func TestGeneratesPasswordWhenNotSupplied(t *testing.T) {
+// The credentials are static: what is in the environment is what works. An
+// empty password would create an account nobody can sign into, so it fails the
+// boot instead.
+func TestEmptyPasswordFailsRatherThanCreatingAnUnreachableAccount(t *testing.T) {
 	cfg := validConfig()
 	cfg.Password = ""
 	uc, pg := harness(cfg)
 
-	out, err := uc.Execute(context.Background(), Input{})
-	if err != nil {
+	if _, err := uc.Execute(context.Background(), Input{}); err == nil {
+		t.Fatal("expected an error for an empty SUPER_ADMIN_PASSWORD")
+	}
+	if len(pg.created) != 0 {
+		t.Fatal("an admin was created with no password")
+	}
+}
+
+// The environment password is used exactly as given — hashed, never stored raw.
+func TestConfiguredPasswordIsUsedVerbatim(t *testing.T) {
+	uc, pg := harness(validConfig())
+
+	if _, err := uc.Execute(context.Background(), Input{}); err != nil {
 		t.Fatalf("Execute: %v", err)
-	}
-	if !out.Created {
-		t.Fatal("no admin was created")
-	}
-	if out.GeneratedPassword == "" {
-		t.Fatal("no password was generated, so the account is unreachable")
-	}
-	if len(out.GeneratedPassword) < cfg.MinPasswordLength {
-		t.Fatalf("generated password is %d characters, below the configured floor of %d",
-			len(out.GeneratedPassword), cfg.MinPasswordLength)
 	}
 	if len(pg.created) != 1 {
 		t.Fatalf("created %d users, want 1", len(pg.created))
 	}
-	// The stored value must be the hash, never the password itself.
-	if pg.created[0].PasswordHash == out.GeneratedPassword {
-		t.Fatal("the generated password was stored unhashed")
-	}
-}
-
-func TestGeneratedPasswordsDiffer(t *testing.T) {
-	cfg := validConfig()
-	cfg.Password = ""
-
-	seen := make(map[string]struct{}, 8)
-	for i := 0; i < 8; i++ {
-		uc, _ := harness(cfg)
-		out, err := uc.Execute(context.Background(), Input{})
-		if err != nil {
-			t.Fatalf("Execute: %v", err)
-		}
-		if _, dup := seen[out.GeneratedPassword]; dup {
-			t.Fatal("the same password was generated twice")
-		}
-		seen[out.GeneratedPassword] = struct{}{}
-	}
-}
-
-// An explicit password is used verbatim and must not be reported as generated,
-// or the caller would print a secret the operator already knows into the logs.
-func TestSuppliedPasswordIsNotReportedAsGenerated(t *testing.T) {
-	uc, _ := harness(validConfig())
-
-	out, err := uc.Execute(context.Background(), Input{})
-	if err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-	if out.GeneratedPassword != "" {
-		t.Fatal("an explicitly configured password was reported as generated")
+	if pg.created[0].PasswordHash == validConfig().Password {
+		t.Fatal("the password was stored unhashed")
 	}
 }
 

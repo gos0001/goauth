@@ -31,15 +31,14 @@ func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) {
 	// but handing it out turns a read-only admin view into an offline cracking
 	// target.
 	return Output{
-		ID:                 user.ID,
-		Username:           user.Username,
-		Email:              user.Email,
-		IsAdmin:            user.IsAdmin,
-		Status:             string(user.Status),
-		MustChangePassword: user.MustChangePassword,
-		LastLoginAt:        user.LastLoginAt,
-		CreatedAt:          user.CreatedAt,
-		UpdatedAt:          user.UpdatedAt,
+		ID:          user.ID,
+		Username:    user.Username,
+		Email:       user.Email,
+		IsAdmin:     user.IsAdmin,
+		Status:      string(user.Status),
+		LastLoginAt: user.LastLoginAt,
+		CreatedAt:   user.CreatedAt,
+		UpdatedAt:   user.UpdatedAt,
 	}, nil
 }
 
@@ -55,13 +54,12 @@ func (in *Input) Validate() error {
 }
 
 type Output struct {
-	ID                 string     `json:"id"`
-	Username           string     `json:"username,omitempty"`
-	Email              string     `json:"email,omitempty"`
-	IsAdmin            bool       `json:"is_admin"`
-	Status             string     `json:"status"`
-	MustChangePassword bool       `json:"must_change_password"`
-	LastLoginAt        *time.Time `json:"last_login_at,omitempty"`
-	CreatedAt          time.Time  `json:"created_at"`
-	UpdatedAt          time.Time  `json:"updated_at"`
+	ID          string     `json:"id"`
+	Username    string     `json:"username,omitempty"`
+	Email       string     `json:"email,omitempty"`
+	IsAdmin     bool       `json:"is_admin"`
+	Status      string     `json:"status"`
+	LastLoginAt *time.Time `json:"last_login_at,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
 }

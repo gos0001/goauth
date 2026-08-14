@@ -46,3 +46,10 @@ WHERE created_at < $1 AND (delivered_at IS NOT NULL OR failed_at IS NOT NULL);
 
 -- name: CountPendingOutboxEvents :one
 SELECT count(*) FROM ga_outbox WHERE delivered_at IS NULL AND failed_at IS NULL;
+
+-- The counterpart to DeleteOutboxEventsBefore: rows that were never delivered
+-- and never given up on. Nothing settles these when delivery is switched off, so
+-- a hard age ceiling is the only thing that bounds them.
+-- name: DeleteStuckOutboxEvents :execrows
+DELETE FROM ga_outbox
+WHERE created_at < $1 AND delivered_at IS NULL AND failed_at IS NULL;

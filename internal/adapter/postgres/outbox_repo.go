@@ -118,3 +118,14 @@ func truncate(s string, max int) string {
 	}
 	return s[:max] + "…"
 }
+
+// DeleteStuckOutboxEvents removes events that were never delivered and never
+// abandoned. Deleting one loses it for good, so callers use a much wider window
+// than for settled rows.
+func (a *Adapter) DeleteStuckOutboxEvents(ctx context.Context, cutoff time.Time) (int, error) {
+	n, err := a.q.DeleteStuckOutboxEvents(ctx, ts(cutoff))
+	if err != nil {
+		return 0, MapError(err, nil)
+	}
+	return int(n), nil
+}

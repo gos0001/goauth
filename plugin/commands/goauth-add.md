@@ -37,6 +37,7 @@ the application's:
       JWT_ISSUER: goauth
       JWT_AUDIENCE: <this project's name>
       SUPER_ADMIN_USERNAME: superadmin
+      SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD:?}
       APP_ENV: production
       ADMIN_ADDR: "0.0.0.0:8081"
     ports:
@@ -85,10 +86,10 @@ instead of creating a second one.
 
 ```bash
 docker compose up -d auth
-docker compose logs auth | grep 'generated password'
 ```
 
-The bootstrap admin's password is printed **once**, on the run that creates the
-account. It must be changed at first login.
+The admin credentials are whatever `SUPER_ADMIN_USERNAME` and
+`SUPER_ADMIN_PASSWORD` say — add both to `.env`. Nothing is generated and
+nothing is printed to the log.
 
 Then point them at `/goauth-verify` to wire token verification into the service.

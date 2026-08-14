@@ -44,8 +44,6 @@ func Write(c *gin.Context, logger *zap.SugaredLogger, op string, err error) {
 		httpserver.Forbidden(c, "account is blocked")
 	case errors.Is(err, domain.ErrUserDeleted):
 		httpserver.Forbidden(c, "account is deleted")
-	case errors.Is(err, domain.ErrMustChangePassword):
-		httpserver.Forbidden(c, "password change required")
 
 	case errors.Is(err, domain.ErrLastAdmin):
 		httpserver.Conflict(c, "cannot remove the last active admin")

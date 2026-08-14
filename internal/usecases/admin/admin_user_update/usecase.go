@@ -105,13 +105,12 @@ func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) {
 	uc.record(ctx, in, current, updated)
 
 	return Output{
-		ID:                 updated.ID,
-		Username:           updated.Username,
-		Email:              updated.Email,
-		IsAdmin:            updated.IsAdmin,
-		Status:             string(updated.Status),
-		MustChangePassword: updated.MustChangePassword,
-		UpdatedAt:          updated.UpdatedAt,
+		ID:        updated.ID,
+		Username:  updated.Username,
+		Email:     updated.Email,
+		IsAdmin:   updated.IsAdmin,
+		Status:    string(updated.Status),
+		UpdatedAt: updated.UpdatedAt,
 	}, nil
 }
 
@@ -193,11 +192,10 @@ func (in *Input) Validate() error {
 }
 
 type Output struct {
-	ID                 string    `json:"id"`
-	Username           string    `json:"username,omitempty"`
-	Email              string    `json:"email,omitempty"`
-	IsAdmin            bool      `json:"is_admin"`
-	Status             string    `json:"status"`
-	MustChangePassword bool      `json:"must_change_password"`
-	UpdatedAt          time.Time `json:"updated_at"`
+	ID        string    `json:"id"`
+	Username  string    `json:"username,omitempty"`
+	Email     string    `json:"email,omitempty"`
+	IsAdmin   bool      `json:"is_admin"`
+	Status    string    `json:"status"`
+	UpdatedAt time.Time `json:"updated_at"`
 }

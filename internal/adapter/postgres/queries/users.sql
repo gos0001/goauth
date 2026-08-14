@@ -2,14 +2,13 @@
 -- case, so equality is exact and no lower() wrapper is needed here.
 
 -- name: CreateUser :one
-INSERT INTO ga_users (username, email, password_hash, is_admin, status, must_change_password)
+INSERT INTO ga_users (username, email, password_hash, is_admin, status)
 VALUES (
     sqlc.narg('username'),
     sqlc.narg('email'),
     sqlc.arg('password_hash'),
     sqlc.arg('is_admin'),
-    sqlc.arg('status'),
-    sqlc.arg('must_change_password')
+    sqlc.arg('status')
 )
 RETURNING *;
 
@@ -37,9 +36,8 @@ RETURNING *;
 
 -- name: SetUserPassword :one
 UPDATE ga_users
-SET password_hash        = sqlc.arg('password_hash'),
-    must_change_password = sqlc.arg('must_change_password'),
-    updated_at           = now()
+SET password_hash = sqlc.arg('password_hash'),
+    updated_at    = now()
 WHERE id = sqlc.arg('id')
 RETURNING *;
 

@@ -47,25 +47,23 @@ func (q *Queries) CountUsers(ctx context.Context, arg CountUsersParams) (int64, 
 
 const createUser = `-- name: CreateUser :one
 
-INSERT INTO ga_users (username, email, password_hash, is_admin, status, must_change_password)
+INSERT INTO ga_users (username, email, password_hash, is_admin, status)
 VALUES (
     $1,
     $2,
     $3,
     $4,
-    $5,
-    $6
+    $5
 )
-RETURNING id, username, email, password_hash, is_admin, status, must_change_password, last_login_at, created_at, updated_at
+RETURNING id, username, email, password_hash, is_admin, status, last_login_at, created_at, updated_at
 `
 
 type CreateUserParams struct {
-	Username           pgtype.Text `json:"username"`
-	Email              pgtype.Text `json:"email"`
-	PasswordHash       string      `json:"password_hash"`
-	IsAdmin            bool        `json:"is_admin"`
-	Status             string      `json:"status"`
-	MustChangePassword bool        `json:"must_change_password"`
+	Username     pgtype.Text `json:"username"`
+	Email        pgtype.Text `json:"email"`
+	PasswordHash string      `json:"password_hash"`
+	IsAdmin      bool        `json:"is_admin"`
+	Status       string      `json:"status"`
 }
 
 // Identifiers arrive already normalised (trimmed, lowercased) from the use
@@ -77,7 +75,6 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (GaUser,
 		arg.PasswordHash,
 		arg.IsAdmin,
 		arg.Status,
-		arg.MustChangePassword,
 	)
 	var i GaUser
 	err := row.Scan(
@@ -87,7 +84,6 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (GaUser,
 		&i.PasswordHash,
 		&i.IsAdmin,
 		&i.Status,
-		&i.MustChangePassword,
 		&i.LastLoginAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -96,7 +92,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (GaUser,
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, username, email, password_hash, is_admin, status, must_change_password, last_login_at, created_at, updated_at FROM ga_users WHERE email = $1
+SELECT id, username, email, password_hash, is_admin, status, last_login_at, created_at, updated_at FROM ga_users WHERE email = $1
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email pgtype.Text) (GaUser, error) {
@@ -109,7 +105,6 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email pgtype.Text) (GaUser
 		&i.PasswordHash,
 		&i.IsAdmin,
 		&i.Status,
-		&i.MustChangePassword,
 		&i.LastLoginAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -118,7 +113,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email pgtype.Text) (GaUser
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, username, email, password_hash, is_admin, status, must_change_password, last_login_at, created_at, updated_at FROM ga_users WHERE id = $1
+SELECT id, username, email, password_hash, is_admin, status, last_login_at, created_at, updated_at FROM ga_users WHERE id = $1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (GaUser, error) {
@@ -131,7 +126,6 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (GaUser, error)
 		&i.PasswordHash,
 		&i.IsAdmin,
 		&i.Status,
-		&i.MustChangePassword,
 		&i.LastLoginAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -140,7 +134,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (GaUser, error)
 }
 
 const getUserByUsername = `-- name: GetUserByUsername :one
-SELECT id, username, email, password_hash, is_admin, status, must_change_password, last_login_at, created_at, updated_at FROM ga_users WHERE username = $1
+SELECT id, username, email, password_hash, is_admin, status, last_login_at, created_at, updated_at FROM ga_users WHERE username = $1
 `
 
 func (q *Queries) GetUserByUsername(ctx context.Context, username pgtype.Text) (GaUser, error) {
@@ -153,7 +147,6 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username pgtype.Text) (
 		&i.PasswordHash,
 		&i.IsAdmin,
 		&i.Status,
-		&i.MustChangePassword,
 		&i.LastLoginAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -162,7 +155,7 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username pgtype.Text) (
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, username, email, password_hash, is_admin, status, must_change_password, last_login_at, created_at, updated_at FROM ga_users
+SELECT id, username, email, password_hash, is_admin, status, last_login_at, created_at, updated_at FROM ga_users
 WHERE ($1::text IS NULL OR status = $1::text)
   AND (
         $2::text IS NULL
@@ -201,7 +194,6 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]GaUser,
 			&i.PasswordHash,
 			&i.IsAdmin,
 			&i.Status,
-			&i.MustChangePassword,
 			&i.LastLoginAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -218,21 +210,19 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]GaUser,
 
 const setUserPassword = `-- name: SetUserPassword :one
 UPDATE ga_users
-SET password_hash        = $1,
-    must_change_password = $2,
-    updated_at           = now()
-WHERE id = $3
-RETURNING id, username, email, password_hash, is_admin, status, must_change_password, last_login_at, created_at, updated_at
+SET password_hash = $1,
+    updated_at    = now()
+WHERE id = $2
+RETURNING id, username, email, password_hash, is_admin, status, last_login_at, created_at, updated_at
 `
 
 type SetUserPasswordParams struct {
-	PasswordHash       string    `json:"password_hash"`
-	MustChangePassword bool      `json:"must_change_password"`
-	ID                 uuid.UUID `json:"id"`
+	PasswordHash string    `json:"password_hash"`
+	ID           uuid.UUID `json:"id"`
 }
 
 func (q *Queries) SetUserPassword(ctx context.Context, arg SetUserPasswordParams) (GaUser, error) {
-	row := q.db.QueryRow(ctx, setUserPassword, arg.PasswordHash, arg.MustChangePassword, arg.ID)
+	row := q.db.QueryRow(ctx, setUserPassword, arg.PasswordHash, arg.ID)
 	var i GaUser
 	err := row.Scan(
 		&i.ID,
@@ -241,7 +231,6 @@ func (q *Queries) SetUserPassword(ctx context.Context, arg SetUserPasswordParams
 		&i.PasswordHash,
 		&i.IsAdmin,
 		&i.Status,
-		&i.MustChangePassword,
 		&i.LastLoginAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -257,7 +246,7 @@ SET status     = 'deleted',
     is_admin   = false,
     updated_at = now()
 WHERE id = $1
-RETURNING id, username, email, password_hash, is_admin, status, must_change_password, last_login_at, created_at, updated_at
+RETURNING id, username, email, password_hash, is_admin, status, last_login_at, created_at, updated_at
 `
 
 // Soft delete keeps the row so user_id references held by other services never
@@ -272,7 +261,6 @@ func (q *Queries) SoftDeleteUser(ctx context.Context, id uuid.UUID) (GaUser, err
 		&i.PasswordHash,
 		&i.IsAdmin,
 		&i.Status,
-		&i.MustChangePassword,
 		&i.LastLoginAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -297,7 +285,7 @@ SET username   = COALESCE($1, username),
     is_admin   = COALESCE($4, is_admin),
     updated_at = now()
 WHERE id = $5
-RETURNING id, username, email, password_hash, is_admin, status, must_change_password, last_login_at, created_at, updated_at
+RETURNING id, username, email, password_hash, is_admin, status, last_login_at, created_at, updated_at
 `
 
 type UpdateUserParams struct {
@@ -327,7 +315,6 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (GaUser,
 		&i.PasswordHash,
 		&i.IsAdmin,
 		&i.Status,
-		&i.MustChangePassword,
 		&i.LastLoginAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,

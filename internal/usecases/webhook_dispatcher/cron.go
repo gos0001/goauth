@@ -5,21 +5,31 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+
+	"github.com/gos0001/goauth/pkg/webhook"
 )
 
 type CronJob struct {
 	uc     *Usecase
+	sender Sender
 	logger *zap.SugaredLogger
 	cfg    Config
 }
 
-func NewCronJob(uc *Usecase, logger *zap.SugaredLogger, cfg Config) *CronJob {
-	return &CronJob{uc: uc, logger: logger, cfg: cfg}
+func NewCronJob(uc *Usecase, sender *webhook.Sender, logger *zap.SugaredLogger, cfg Config) *CronJob {
+	return &CronJob{uc: uc, sender: sender, logger: logger, cfg: cfg}
 }
 
 func (j *CronJob) Name() string { return "webhook_dispatcher" }
 
-func (j *CronJob) Interval() time.Duration { return j.cfg.Interval }
+// Zero when no webhook is configured, so the runner does not schedule a job
+// that would wake every ten seconds only to report itself skipped.
+func (j *CronJob) Interval() time.Duration {
+	if !j.sender.Enabled() {
+		return 0
+	}
+	return j.cfg.Interval
+}
 
 func (j *CronJob) Run(ctx context.Context) error {
 	out, err := j.uc.Execute(ctx, Input{})

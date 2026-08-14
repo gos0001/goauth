@@ -25,7 +25,6 @@ CREATE TABLE IF NOT EXISTS ga_users (
     password_hash        text        NOT NULL,
     is_admin             boolean     NOT NULL DEFAULT false,
     status               text        NOT NULL DEFAULT 'active',
-    must_change_password boolean     NOT NULL DEFAULT false,
     last_login_at        timestamptz,
     created_at           timestamptz NOT NULL DEFAULT now(),
     updated_at           timestamptz NOT NULL DEFAULT now(),
@@ -101,6 +100,10 @@ CREATE INDEX IF NOT EXISTS ga_outbox_created_idx ON ga_outbox (created_at);
 --
 -- Soft delete clears both identifiers, which the original constraint forbade —
 -- DELETE /admin/users/{id} failed with a check violation on every call.
+-- The bootstrap admin's credentials come from the environment, so a forced
+-- password change was ceremony over a value the operator already knows.
+ALTER TABLE ga_users DROP COLUMN IF EXISTS must_change_password;
+
 ALTER TABLE ga_users DROP CONSTRAINT IF EXISTS ga_users_identifier_present;
 ALTER TABLE ga_users ADD  CONSTRAINT ga_users_identifier_present
     CHECK (status = 'deleted' OR username IS NOT NULL OR email IS NOT NULL);
