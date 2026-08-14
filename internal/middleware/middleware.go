@@ -129,23 +129,39 @@ func (m *Middleware) Auth() gin.HandlerFunc {
 	}
 }
 
-// AuthSilent verifies the bearer token but answers 404 on every failure instead
-// of 401.
+// AuthSilent verifies the bearer token for the admin surface, answering 404
+// rather than 401 so that an unauthorised caller cannot confirm /admin exists
+// and merely needs credentials. Paired with AdminJWT, a missing token, a bad
+// token and a valid token without rights are all indistinguishable from a route
+// that was never registered.
 //
-// It guards the admin surface on the public listener, where a 401 would confirm
-// that /admin exists and merely needs credentials. Paired with AdminJWT, every
-// rejection — no token, bad token, valid token without rights — is
-// indistinguishable from a route that was never registered.
+// One deliberate exception: an **expired** token gets a 401.
+//
+// Without it there is no signal that a token needs refreshing, and since access
+// tokens live minutes, a panel simply starts answering "not found" and cannot
+// recover — its refresh flow keys on 401. Saying "expired" discloses nothing:
+// the token is one this service issued and signed, so its holder already had a
+// session and learns nothing new about themselves. What stays hidden is who is
+// an admin, which is AdminJWT's job — a valid non-admin token still gets 404.
 func (m *Middleware) AuthSilent() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		raw, ok := bearer(c)
 		if !ok {
+			// Nothing presented, so nothing can have expired: this is the pure
+			// discovery case and stays silent.
 			c.AbortWithStatus(http.StatusNotFound)
 			return
 		}
 
 		claims, err := m.signer.Verify(raw)
 		if err != nil {
+			if errors.Is(err, token.ErrExpired) {
+				// Same status and body as /auth/*, so a client needs one rule
+				// rather than one per surface.
+				httpserver.Unauthorized(c, "token expired")
+				c.Abort()
+				return
+			}
 			c.AbortWithStatus(http.StatusNotFound)
 			return
 		}

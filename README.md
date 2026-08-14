@@ -6,7 +6,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/gos0001/goauth)](https://goreportcard.com/report/github.com/gos0001/goauth)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-> **Stable: `v1.4.1`** — `ghcr.io/gos0001/goauth:1`
+> **Stable: `v1.4.2`** — `ghcr.io/gos0001/goauth:1`
 
 Identity service in a container. Users, passwords, sessions, and Ed25519-signed
 JWTs your services verify offline. It answers **who is this user** and nothing
@@ -107,7 +107,11 @@ GET              /admin/audit
 Reachable two ways: on `:8080` with a user JWT whose account has `is_admin` —
 this is what a browser panel uses — and on `:8081` with the static `ADMIN_TOKEN`
 for machines. **Never give that token to a browser**, and do not publish `8081`.
-Every rejection answers `404`.
+
+An **expired** token answers `401 {"error":"token expired"}`, the same as
+`/auth/*`, so a client refreshes and retries. Every other rejection answers a
+bodiless `404`, so an unauthorised caller cannot tell the surface from a route
+that does not exist — retrying those will not help.
 
 ## Logging in
 

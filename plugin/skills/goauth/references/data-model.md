@@ -97,6 +97,18 @@ Two ways in, and they must not be confused:
   give this token to a browser:** it is shared, does not expire, and cannot be
   revoked for one holder.
 
+### What the admin surface answers
+
+| Status | Meaning | What the client does |
+|---|---|---|
+| `401` with `{"error":"token expired"}` | the access token is past its TTL | refresh, then retry |
+| `404`, empty body | not an admin, no token, or a token this service did not issue | nothing; retrying will not help |
+| `403 reauthentication required` | destructive call outside the sudo window | prompt for the password, retry |
+
+The empty `404` is deliberate: it makes the surface indistinguishable from a
+route that was never registered. Expiry is the one exception, because a client
+otherwise has no way to know it should refresh.
+
 Destructive calls (`PATCH`, `DELETE`, setting a password) additionally require
 that the acting admin presented their password within `ADMIN_REAUTH_WINDOW`
 (15 minutes by default). A `403 reauthentication required` means the panel should
