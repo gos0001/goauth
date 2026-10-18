@@ -24,6 +24,12 @@ type Config struct {
 
 	// MaxAge is how long a browser may cache the preflight answer.
 	MaxAge time.Duration `envconfig:"CORS_MAX_AGE" default:"12h"`
+
+	// AllowCredentials adds Access-Control-Allow-Credentials, which a browser
+	// needs before it will send the goauth cookies cross-origin. Not an env
+	// variable on purpose: the wire graph ties it to the authcookie channel's
+	// own switch, so the two can never disagree about whether cookies exist.
+	AllowCredentials bool
 }
 
 func LoadConfig() (Config, error) {

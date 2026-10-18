@@ -31,4 +31,8 @@ type Output struct {
 	ExpiresIn    int       `json:"expires_in"`
 	ExpiresAt    time.Time `json:"expires_at"`
 	RefreshToken string    `json:"refresh_token"`
+
+	// RefreshExpiresAt is never serialised: the cookie channel needs the
+	// refresh lifetime for Max-Age, and no JSON client has ever asked for it.
+	RefreshExpiresAt time.Time `json:"-"`
 }

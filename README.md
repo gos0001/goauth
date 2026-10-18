@@ -94,6 +94,12 @@ Three things to know:
 With a bearer token: `GET /auth/me`, `GET /auth/sessions`,
 `POST /auth/password`, `POST /auth/revoke`, `POST /auth/logout-all`.
 
+With `AUTH_COOKIE_ENABLED=true`, the token endpoints additionally speak to
+browsers through cookies — see [Cookie channel](#cookie-channel): `/auth/token`
+and `/auth/password` set `goauth_access` / `goauth_refresh` (HttpOnly), the
+logout endpoints delete them, and the auth middleware accepts the access cookie
+when no `Authorization` header was presented. The JSON body never changes.
+
 Admin — user CRUD, block, force password, sessions, audit:
 
 ```
@@ -124,6 +130,33 @@ Returns an access token (JWT, 15 min) and a refresh token (opaque, 30 days).
 `identifier` is a username or email. Refresh tokens are **single-use** — each
 exchange returns a new one, and replaying a spent one kills every session from
 that login.
+
+## Cookie channel
+
+Opt-in with `AUTH_COOKIE_ENABLED=true`, for deployments whose main client is a
+browser SPA. The same token responses then also arrive as cookies:
+
+- `goauth_access` / `goauth_refresh` — `HttpOnly`, `Secure`, `SameSite=Strict`
+  by default (`AUTH_COOKIE_SAMESITE=lax` to allow top-level navigations from
+  other sites), `Path=/`, host-only (no `Domain`), `Max-Age` matching each
+  token's lifetime.
+- `/auth/token` with an empty `refresh_token` in the body spends the refresh
+  **cookie** instead — a browser rotates its session without ever reading the
+  token. The body stays authoritative when it names one.
+- `/auth/revoke` and `/auth/logout-all` delete the cookies;
+  `/auth/password` replaces them with the new pair.
+- Requests without an `Authorization` header authenticate from the access
+  cookie. The header always wins when present.
+- Cross-origin frontends need `ALLOW_DOMAINS` naming their origins — with the
+  channel on, `*` is refused at startup, because browsers ignore the
+  credentials header alongside a wildcard.
+
+What this buys and what it does not: `HttpOnly` means injected script cannot
+read the refresh token, so an XSS cannot export the session — it can only
+drive it from inside the browser while it runs. The XSS itself is not
+prevented by anything here; a `Content-Security-Policy` on the frontend is
+that layer. For server-to-server, mobile and CLI clients nothing changes:
+the JSON API is identical with the channel on or off.
 
 ## Verifying tokens
 
@@ -223,6 +256,9 @@ verification into your code.
 | `DB_AUTO_CREATE` / `DB_AUTO_SCHEMA` | `true` | create the database / its tables |
 | `ALLOW_DOMAINS` | — | CORS origins; empty blocks browsers |
 | `CORS_MAX_AGE` | `12h` | how long a browser caches the preflight |
+| `AUTH_COOKIE_ENABLED` | `false` | browser cookie channel — see [Cookie channel](#cookie-channel) |
+| `AUTH_COOKIE_SECURE` | `true` | cookies are HTTPS-only; localhost stays fine |
+| `AUTH_COOKIE_SAMESITE` | `strict` | or `lax`, for top-level navigations from other sites |
 | `TRUSTED_PROXIES` | — | CIDRs, `cloudflare`, or `private` |
 | `CLIENT_IP_HEADER` | — | `CF-Connecting-IP`, `X-Forwarded-For` |
 | `RATELIMIT_LOGIN_IP` / `_PAIR` / `_REGISTER` | `100/15m` / `10/15m` / `20/1h` | |

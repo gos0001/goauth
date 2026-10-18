@@ -91,10 +91,11 @@ func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) {
 	uc.auditor.Record(ctx, audit.Event(domain.ActorUser(user.ID), domain.ActionPasswordChanged, user.ID, in.IP, nil))
 
 	return Output{
-		AccessToken:  pair.AccessToken,
-		TokenType:    pair.TokenType,
-		ExpiresIn:    pair.ExpiresIn,
-		ExpiresAt:    pair.ExpiresAt,
-		RefreshToken: pair.RefreshToken,
+		AccessToken:      pair.AccessToken,
+		TokenType:        pair.TokenType,
+		ExpiresIn:        pair.ExpiresIn,
+		ExpiresAt:        pair.ExpiresAt,
+		RefreshToken:     pair.RefreshToken,
+		RefreshExpiresAt: pair.RefreshExpiresAt,
 	}, nil
 }

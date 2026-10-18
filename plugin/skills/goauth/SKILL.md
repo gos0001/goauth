@@ -59,6 +59,13 @@ tokens are **single-use**: each exchange returns a new one and invalidates the
 old. Presenting a spent token destroys the whole session family, so a client must
 store the new refresh token or the user is logged out.
 
+For a browser SPA, `AUTH_COOKIE_ENABLED=true` turns on the cookie channel: the
+same responses also set `goauth_access` / `goauth_refresh` HttpOnly cookies,
+the middleware accepts the access cookie when no header was presented, and a
+refresh with an empty `refresh_token` in the body spends the cookie. Frontend
+then never holds a refresh token in JS-readable storage. JSON clients are
+unaffected either way.
+
 The access token carries `sub` (the user id), `sid`, `exp`, and `adm`. Treat
 `adm` as a hint for rendering only — it cannot be revoked before it expires.
 

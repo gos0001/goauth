@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
+	"github.com/gos0001/goauth/pkg/authcookie"
 	"github.com/gos0001/goauth/pkg/token"
 )
 
@@ -158,6 +159,108 @@ func TestValidTokenPasses(t *testing.T) {
 
 	if w := call(r, "/admin/users", mint(t, s, time.Now())); w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 for a valid token", w.Code)
+	}
+}
+
+// --- cookie channel ---
+
+func cookieChannel(t *testing.T, s *token.Signer, enabled bool) *gin.Engine {
+	t.Helper()
+
+	m := &Middleware{
+		signer:  s,
+		cookies: authcookie.New(authcookie.Config{Enabled: enabled, Secure: true, SameSite: "strict"}),
+		logger:  zap.NewNop().Sugar(),
+	}
+
+	r := gin.New()
+	r.GET("/admin/users", m.AuthSilent(), func(c *gin.Context) { c.String(http.StatusOK, "ok") })
+	r.GET("/auth/me", m.Auth(), func(c *gin.Context) { c.String(http.StatusOK, "ok") })
+	return r
+}
+
+func callWithCookie(r *gin.Engine, path, cookie string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req.Header.Set("Cookie", cookie)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	return w
+}
+
+func TestAccessCookieAuthenticates(t *testing.T) {
+	s := signer(t, 1)
+	r := cookieChannel(t, s, true)
+
+	w := callWithCookie(r, "/auth/me", authcookie.AccessName+"="+mint(t, s, time.Now()))
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 — the access cookie is a credential when the channel is on", w.Code)
+	}
+
+	// The silent surface must behave the same way: a panel that logged in via
+	// cookies has no header to send either.
+	if w := callWithCookie(r, "/admin/users", authcookie.AccessName+"="+mint(t, s, time.Now())); w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 on the silent surface", w.Code)
+	}
+}
+
+// A caller naming its credential in the header must not be refused because of
+// what the browser attached — and must not be authenticated by it either.
+func TestHeaderWinsOverCookie(t *testing.T) {
+	s := signer(t, 1)
+	other := signer(t, 100)
+	r := cookieChannel(t, s, true)
+
+	// A valid header alongside a wrong-key cookie: the header decides.
+	req := httptest.NewRequest(http.MethodGet, "/auth/me", nil)
+	req.Header.Set("Authorization", "Bearer "+mint(t, s, time.Now()))
+	req.Header.Set("Cookie", authcookie.AccessName+"="+mint(t, other, time.Now()))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 — the explicit credential has priority", w.Code)
+	}
+}
+
+func TestCookieIgnoredWhenChannelDisabled(t *testing.T) {
+	s := signer(t, 1)
+	r := cookieChannel(t, s, false)
+
+	w := callWithCookie(r, "/auth/me", authcookie.AccessName+"="+mint(t, s, time.Now()))
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401 — a disabled channel must not honour cookies", w.Code)
+	}
+
+	if w := callWithCookie(r, "/admin/users", authcookie.AccessName+"="+mint(t, s, time.Now())); w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want the silent 404", w.Code)
+	}
+}
+
+// The expiry contract must hold whichever way the token was presented, or a
+// cookie client cannot key its refresh on 401.
+func TestExpiredCookieIsUnauthorizedOnBothSurfaces(t *testing.T) {
+	s := signer(t, 1)
+	r := cookieChannel(t, s, true)
+	expired := authcookie.AccessName + "=" + mint(t, s, time.Now().Add(-2*time.Hour))
+
+	admin := callWithCookie(r, "/admin/users", expired)
+	auth := callWithCookie(r, "/auth/me", expired)
+
+	if admin.Code != http.StatusUnauthorized || auth.Code != http.StatusUnauthorized {
+		t.Fatalf("/admin/users = %d, /auth/me = %d, want both 401", admin.Code, auth.Code)
+	}
+	if admin.Body.String() != auth.Body.String() {
+		t.Errorf("bodies differ:\n  admin: %s\n  auth:  %s", admin.Body.String(), auth.Body.String())
+	}
+}
+
+func TestGarbageCookieIsNotACredential(t *testing.T) {
+	s := signer(t, 1)
+	r := cookieChannel(t, s, true)
+
+	for _, value := range []string{"not-a-jwt", ""} {
+		if w := callWithCookie(r, "/auth/me", authcookie.AccessName+"="+value); w.Code != http.StatusUnauthorized {
+			t.Fatalf("cookie %q: status = %d, want 401", value, w.Code)
+		}
 	}
 }
 

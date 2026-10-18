@@ -25,6 +25,65 @@ func router(t *testing.T, domains ...string) *gin.Engine {
 	return r
 }
 
+func routerWithCredentials(t *testing.T, domains ...string) *gin.Engine {
+	t.Helper()
+
+	mw, err := New(Config{AllowDomains: domains, MaxAge: 12 * time.Hour, AllowCredentials: true})
+	if err != nil {
+		t.Fatalf("New(%v): %v", domains, err)
+	}
+
+	r := gin.New()
+	r.Use(mw.Handler())
+	r.POST("/auth/token", func(c *gin.Context) { c.String(http.StatusOK, "ok") })
+	return r
+}
+
+// A browser only sends the goauth cookies cross-origin once this header tells
+// it to — without the header the whole cookie channel works same-origin and
+// nothing else.
+func TestCredentialsHeaderOnAllowedOrigin(t *testing.T) {
+	r := routerWithCredentials(t, "https://app.example.com")
+
+	w := do(r, http.MethodPost, "/auth/token", "https://app.example.com")
+	if got := w.Header().Get("Access-Control-Allow-Credentials"); got != "true" {
+		t.Fatalf("Allow-Credentials = %q on a simple request", got)
+	}
+
+	w = do(r, http.MethodOptions, "/auth/token", "https://app.example.com")
+	if got := w.Header().Get("Access-Control-Allow-Credentials"); got != "true" {
+		t.Fatalf("Allow-Credentials = %q on a preflight", got)
+	}
+}
+
+// Never alongside an unlisted origin: credentials for everyone is not CORS.
+func TestCredentialsHeaderAbsentForUnlistedOrigin(t *testing.T) {
+	r := routerWithCredentials(t, "https://app.example.com")
+
+	w := do(r, http.MethodPost, "/auth/token", "https://evil.com")
+	if got := w.Header().Get("Access-Control-Allow-Credentials"); got != "" {
+		t.Fatalf("Allow-Credentials = %q for an unlisted origin", got)
+	}
+}
+
+func TestNoCredentialsHeaderByDefault(t *testing.T) {
+	r := router(t, "https://app.example.com")
+
+	w := do(r, http.MethodPost, "/auth/token", "https://app.example.com")
+	if got := w.Header().Get("Access-Control-Allow-Credentials"); got != "" {
+		t.Fatalf("Allow-Credentials = %q — off unless the cookie channel is on", got)
+	}
+}
+
+// Browsers ignore "*" together with credentials outright, so every credentialed
+// call would fail with nothing pointing at the cause. The boot must say it
+// instead.
+func TestWildcardWithCredentialsFailsConstruction(t *testing.T) {
+	if _, err := New(Config{AllowDomains: []string{"*"}, AllowCredentials: true}); err == nil {
+		t.Fatal("wildcard + credentials must be refused at construction")
+	}
+}
+
 func do(r *gin.Engine, method, path, origin string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(method, path, nil)
 	if origin != "" {

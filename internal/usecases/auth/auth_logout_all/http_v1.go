@@ -5,16 +5,18 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/gos0001/goauth/internal/apierr"
+	"github.com/gos0001/goauth/pkg/authcookie"
 	httpserver "github.com/gos0001/goauth/pkg/http_server"
 )
 
 type HTTPv1 struct {
-	uc     *Usecase
-	logger *zap.SugaredLogger
+	uc      *Usecase
+	cookies *authcookie.Cookies
+	logger  *zap.SugaredLogger
 }
 
-func NewHTTPv1(uc *Usecase, logger *zap.SugaredLogger) *HTTPv1 {
-	return &HTTPv1{uc: uc, logger: logger}
+func NewHTTPv1(uc *Usecase, cookies *authcookie.Cookies, logger *zap.SugaredLogger) *HTTPv1 {
+	return &HTTPv1{uc: uc, cookies: cookies, logger: logger}
 }
 
 func (h *HTTPv1) Handle(c *gin.Context) {
@@ -26,5 +28,9 @@ func (h *HTTPv1) Handle(c *gin.Context) {
 		apierr.Write(c, h.logger, "logout all", err)
 		return
 	}
+
+	// Every session of this user is dead — whichever one the cookie holds, it
+	// is among them.
+	h.cookies.Clear(c.Writer)
 	httpserver.OK(c, out)
 }

@@ -18,6 +18,7 @@ import (
 
 	postgresadapter "github.com/gos0001/goauth/internal/adapter/postgres"
 	"github.com/gos0001/goauth/internal/domain"
+	"github.com/gos0001/goauth/pkg/authcookie"
 	httpserver "github.com/gos0001/goauth/pkg/http_server"
 	"github.com/gos0001/goauth/pkg/ratelimit"
 	"github.com/gos0001/goauth/pkg/realip"
@@ -29,6 +30,7 @@ type Middleware struct {
 	limiter  *ratelimit.Limiter
 	signer   *token.Signer
 	postgres *postgresadapter.Adapter
+	cookies  *authcookie.Cookies
 	logger   *zap.SugaredLogger
 	cfg      Config
 }
@@ -38,6 +40,7 @@ func New(
 	limiter *ratelimit.Limiter,
 	signer *token.Signer,
 	pg *postgresadapter.Adapter,
+	cookies *authcookie.Cookies,
 	logger *zap.SugaredLogger,
 	cfg Config,
 ) *Middleware {
@@ -46,6 +49,7 @@ func New(
 		limiter:  limiter,
 		signer:   signer,
 		postgres: pg,
+		cookies:  cookies,
 		logger:   logger,
 		cfg:      cfg,
 	}
@@ -104,7 +108,7 @@ func (m *Middleware) RateLimit(rule ratelimit.Rule, name string) gin.HandlerFunc
 // Auth verifies the bearer token and publishes the caller's identity.
 func (m *Middleware) Auth() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		raw, ok := bearer(c)
+		raw, ok := m.credential(c)
 		if !ok {
 			httpserver.Unauthorized(c, "missing bearer token")
 			c.Abort()
@@ -145,7 +149,7 @@ func (m *Middleware) Auth() gin.HandlerFunc {
 // an admin, which is AdminJWT's job — a valid non-admin token still gets 404.
 func (m *Middleware) AuthSilent() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		raw, ok := bearer(c)
+		raw, ok := m.credential(c)
 		if !ok {
 			// Nothing presented, so nothing can have expired: this is the pure
 			// discovery case and stays silent.
@@ -257,6 +261,22 @@ func (m *Middleware) RequireRecentAuth() gin.HandlerFunc {
 
 		c.Next()
 	}
+}
+
+// credential resolves the presented access token: the Authorization header
+// first, and only when the cookie channel is on, the access cookie as a
+// fallback. The header keeps priority so an explicit credential always
+// overrides whatever the browser attached — and AdminToken deliberately stays
+// on bearer() alone, since the static admin token must never travel in a
+// cookie a browser could hold.
+func (m *Middleware) credential(c *gin.Context) (string, bool) {
+	if raw, ok := bearer(c); ok {
+		return raw, true
+	}
+	if m.cookies == nil || !m.cookies.Enabled() {
+		return "", false
+	}
+	return m.cookies.AccessFromRequest(c.Request)
 }
 
 func bearer(c *gin.Context) (string, bool) {

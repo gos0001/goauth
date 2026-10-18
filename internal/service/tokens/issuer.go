@@ -46,8 +46,12 @@ type Pair struct {
 	TokenType    string
 	ExpiresIn    int
 	ExpiresAt    time.Time
-	SessionID    string
-	FamilyID     string
+	// RefreshExpiresAt is the session row's expiry — when the refresh token
+	// stops being exchangeable. Not part of any JSON response; the cookie
+	// channel uses it for the refresh cookie's Max-Age.
+	RefreshExpiresAt time.Time
+	SessionID        string
+	FamilyID         string
 }
 
 // Context describes where the session is being created from, recorded for the
@@ -113,13 +117,14 @@ func (i *Issuer) sign(user domain.User, session domain.Session, refresh string, 
 	}
 
 	return Pair{
-		AccessToken:  access,
-		RefreshToken: refresh,
-		TokenType:    "Bearer",
-		ExpiresIn:    int(i.signer.AccessTTL().Seconds()),
-		ExpiresAt:    expiresAt,
-		SessionID:    session.ID,
-		FamilyID:     session.FamilyID,
+		AccessToken:      access,
+		RefreshToken:     refresh,
+		TokenType:        "Bearer",
+		ExpiresIn:        int(i.signer.AccessTTL().Seconds()),
+		ExpiresAt:        expiresAt,
+		RefreshExpiresAt: session.ExpiresAt,
+		SessionID:        session.ID,
+		FamilyID:         session.FamilyID,
 	}, nil
 }
 

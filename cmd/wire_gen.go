@@ -39,6 +39,7 @@ import (
 	"github.com/gos0001/goauth/internal/usecases/session_cleaner"
 	"github.com/gos0001/goauth/internal/usecases/sys/sys_health"
 	"github.com/gos0001/goauth/internal/usecases/webhook_dispatcher"
+	"github.com/gos0001/goauth/pkg/authcookie"
 	"github.com/gos0001/goauth/pkg/cors"
 	"github.com/gos0001/goauth/pkg/dbschema"
 	"github.com/gos0001/goauth/pkg/logger"
@@ -105,16 +106,21 @@ func InitializeApp() (*App, error) {
 		return nil, err
 	}
 	adapter := postgres2.New(pool, webhookConfig)
+	authcookieConfig, err := authcookie.LoadConfig()
+	if err != nil {
+		return nil, err
+	}
+	cookies := authcookie.New(authcookieConfig)
 	middlewareConfig, err := middleware.LoadConfig()
 	if err != nil {
 		return nil, err
 	}
-	middlewareMiddleware := middleware.New(resolver, limiter, signer, adapter, sugaredLogger, middlewareConfig)
+	middlewareMiddleware := middleware.New(resolver, limiter, signer, adapter, cookies, sugaredLogger, middlewareConfig)
 	corsConfig, err := cors.LoadConfig()
 	if err != nil {
 		return nil, err
 	}
-	corsMiddleware, err := cors.New(corsConfig)
+	corsMiddleware, err := cors.NewWithCookies(corsConfig, cookies)
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +146,7 @@ func InitializeApp() (*App, error) {
 		return nil, err
 	}
 	auth_tokenUsecase := auth_token.New(adapter, issuer, hasher, limiter, recorder, auth_tokenConfig)
-	auth_tokenHTTPv1 := auth_token.NewHTTPv1(auth_tokenUsecase, sugaredLogger)
+	auth_tokenHTTPv1 := auth_token.NewHTTPv1(auth_tokenUsecase, cookies, sugaredLogger)
 	auth_registerConfig, err := auth_register.LoadConfig()
 	if err != nil {
 		return nil, err
@@ -156,11 +162,11 @@ func InitializeApp() (*App, error) {
 		return nil, err
 	}
 	auth_password_changeUsecase := auth_password_change.New(adapter, issuer, hasher, recorder, auth_password_changeConfig)
-	auth_password_changeHTTPv1 := auth_password_change.NewHTTPv1(auth_password_changeUsecase, sugaredLogger)
+	auth_password_changeHTTPv1 := auth_password_change.NewHTTPv1(auth_password_changeUsecase, cookies, sugaredLogger)
 	auth_revokeUsecase := auth_revoke.New(adapter, recorder)
-	auth_revokeHTTPv1 := auth_revoke.NewHTTPv1(auth_revokeUsecase, sugaredLogger)
+	auth_revokeHTTPv1 := auth_revoke.NewHTTPv1(auth_revokeUsecase, cookies, sugaredLogger)
 	auth_logout_allUsecase := auth_logout_all.New(adapter, recorder)
-	auth_logout_allHTTPv1 := auth_logout_all.NewHTTPv1(auth_logout_allUsecase, sugaredLogger)
+	auth_logout_allHTTPv1 := auth_logout_all.NewHTTPv1(auth_logout_allUsecase, cookies, sugaredLogger)
 	admin_user_createConfig, err := admin_user_create.LoadConfig()
 	if err != nil {
 		return nil, err

@@ -10,6 +10,7 @@
 package cors
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -26,9 +27,10 @@ const (
 )
 
 type Middleware struct {
-	rules  []rule
-	maxAge string
-	any    bool
+	rules       []rule
+	maxAge      string
+	any         bool
+	credentials bool
 }
 
 func New(cfg Config) (*Middleware, error) {
@@ -37,10 +39,20 @@ func New(cfg Config) (*Middleware, error) {
 		return nil, err
 	}
 
+	// "*" with credentials is not a stricter form of permissive — browsers
+	// ignore the combination outright, so every credentialed call would fail
+	// with no hint why. Refusing to boot says it where the operator reads it.
+	if cfg.AllowCredentials && allowAny {
+		return nil, fmt.Errorf(
+			"cors: ALLOW_DOMAINS \"*\" cannot be combined with the cookie channel — " +
+				"name the origins instead")
+	}
+
 	return &Middleware{
-		rules:  rules,
-		any:    allowAny,
-		maxAge: strconv.Itoa(int(cfg.MaxAge.Seconds())),
+		rules:       rules,
+		any:         allowAny,
+		maxAge:      strconv.Itoa(int(cfg.MaxAge.Seconds())),
+		credentials: cfg.AllowCredentials,
 	}, nil
 }
 
@@ -81,6 +93,12 @@ func (m *Middleware) Handler() gin.HandlerFunc {
 			// Without this a shared cache can serve one origin's response, and
 			// its Allow-Origin header, to a different origin.
 			c.Header("Vary", "Origin")
+		}
+
+		// Only ever alongside a concrete origin: the wildcard form is rejected
+		// at construction, because a browser will not honour it.
+		if m.credentials {
+			c.Header("Access-Control-Allow-Credentials", "true")
 		}
 
 		if c.Request.Method == http.MethodOptions {

@@ -92,3 +92,18 @@ curl -i -H "Authorization: Bearer $TOKEN" http://localhost:<this service>/<a pro
 A request with no token must answer `401`, and one with a token minted for a
 different `aud` must also answer `401` — that second check is the one people skip
 and it is what keeps your services apart.
+
+If the project's client is a browser SPA on goauth's cookie channel
+(`AUTH_COOKIE_ENABLED=true`), the same check works with cookies instead:
+
+```bash
+curl -s -c jar.txt -X POST http://localhost:8080/auth/token \
+  -H 'Content-Type: application/json' \
+  -d '{"grant_type":"password","identifier":"superadmin","password":"..."}' >/dev/null
+
+curl -i -b jar.txt http://localhost:8080/auth/me          # cookie, no header
+curl -i -b jar.txt -X POST http://localhost:8080/auth/token \
+  -H 'Content-Type: application/json' -d '{"grant_type":"refresh_token"}'   # rotates via cookie
+```
+
+`/auth/logout-all` must leave the jar without working cookies.
