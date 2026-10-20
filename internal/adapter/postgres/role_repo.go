@@ -6,8 +6,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/gos0001/goauth/internal/adapter/postgres/generated"
-	"github.com/gos0001/goauth/internal/domain"
+	"github.com/gos0001/goauth/v2/internal/adapter/postgres/generated"
+	"github.com/gos0001/goauth/v2/internal/domain"
 )
 
 // CreateRole inserts the role and attaches its permission set in one

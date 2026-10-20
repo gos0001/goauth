@@ -8,8 +8,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/gos0001/goauth/internal/adapter/postgres/generated"
-	"github.com/gos0001/goauth/internal/domain"
+	"github.com/gos0001/goauth/v2/internal/adapter/postgres/generated"
+	"github.com/gos0001/goauth/v2/internal/domain"
 )
 
 // insertEvent writes an outbox row through the caller's transaction-scoped

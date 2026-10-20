@@ -16,13 +16,13 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
-	postgresadapter "github.com/gos0001/goauth/internal/adapter/postgres"
-	"github.com/gos0001/goauth/internal/domain"
-	"github.com/gos0001/goauth/pkg/authcookie"
-	httpserver "github.com/gos0001/goauth/pkg/http_server"
-	"github.com/gos0001/goauth/pkg/ratelimit"
-	"github.com/gos0001/goauth/pkg/realip"
-	"github.com/gos0001/goauth/pkg/token"
+	postgresadapter "github.com/gos0001/goauth/v2/internal/adapter/postgres"
+	"github.com/gos0001/goauth/v2/internal/domain"
+	"github.com/gos0001/goauth/v2/pkg/authcookie"
+	httpserver "github.com/gos0001/goauth/v2/pkg/http_server"
+	"github.com/gos0001/goauth/v2/pkg/ratelimit"
+	"github.com/gos0001/goauth/v2/pkg/realip"
+	"github.com/gos0001/goauth/v2/pkg/token"
 )
 
 type Middleware struct {

@@ -5,8 +5,8 @@ import (
 	"context"
 	"fmt"
 
-	pkgpostgres "github.com/gos0001/goauth/pkg/postgres"
-	pkgredis "github.com/gos0001/goauth/pkg/redis"
+	pkgpostgres "github.com/gos0001/goauth/v2/pkg/postgres"
+	pkgredis "github.com/gos0001/goauth/v2/pkg/redis"
 )
 
 type Usecase struct {

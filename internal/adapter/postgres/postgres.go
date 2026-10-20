@@ -16,10 +16,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/gos0001/goauth/internal/adapter/postgres/generated"
-	"github.com/gos0001/goauth/internal/domain"
-	pkgpostgres "github.com/gos0001/goauth/pkg/postgres"
-	"github.com/gos0001/goauth/pkg/webhook"
+	"github.com/gos0001/goauth/v2/internal/adapter/postgres/generated"
+	"github.com/gos0001/goauth/v2/internal/domain"
+	pkgpostgres "github.com/gos0001/goauth/v2/pkg/postgres"
+	"github.com/gos0001/goauth/v2/pkg/webhook"
 )
 
 // uniqueViolation is Postgres' SQLSTATE for a duplicate key.

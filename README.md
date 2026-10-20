@@ -2,11 +2,11 @@
 
 [![CI](https://github.com/gos0001/goauth/actions/workflows/ci.yml/badge.svg)](https://github.com/gos0001/goauth/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/tag/gos0001/goauth?label=release&sort=semver)](https://github.com/gos0001/goauth/pkgs/container/goauth)
-[![Go Reference](https://pkg.go.dev/badge/github.com/gos0001/goauth.svg)](https://pkg.go.dev/github.com/gos0001/goauth)
-[![Go Report Card](https://goreportcard.com/badge/github.com/gos0001/goauth)](https://goreportcard.com/report/github.com/gos0001/goauth)
+[![Go Reference](https://pkg.go.dev/badge/github.com/gos0001/goauth/v2.svg)](https://pkg.go.dev/github.com/gos0001/goauth/v2)
+[![Go Report Card](https://goreportcard.com/badge/github.com/gos0001/goauth/v2)](https://goreportcard.com/report/github.com/gos0001/goauth/v2)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-> **Stable: `v2.0.0`** — `ghcr.io/gos0001/goauth:2`
+> **Stable: `v2.0.1`** — `ghcr.io/gos0001/goauth:2`
 
 Identity service in a container. Users, passwords, sessions, and Ed25519-signed
 JWTs your services verify offline. It answers **who is this user** and, for its
@@ -216,7 +216,7 @@ the JSON API is identical with the channel on or off.
 In your service, **offline** against the JWKS. Never call goauth per request.
 
 ```go
-import "github.com/gos0001/goauth/pkg/authclient"
+import "github.com/gos0001/goauth/v2/pkg/authclient"
 
 mw, _ := authclient.New(authclient.Config{
     JWKSURL:  "http://auth:8080/.well-known/jwks.json",

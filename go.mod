@@ -1,4 +1,4 @@
-module github.com/gos0001/goauth
+module github.com/gos0001/goauth/v2
 
 go 1.25.0
 

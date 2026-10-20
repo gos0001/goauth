@@ -3,7 +3,7 @@ package auth_register
 import (
 	"fmt"
 
-	"github.com/gos0001/goauth/pkg/appconfig"
+	"github.com/gos0001/goauth/v2/pkg/appconfig"
 )
 
 // Registration modes. The default is closed, because the common case for this

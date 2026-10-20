@@ -1,6 +1,6 @@
 package auth_password_change
 
-import "github.com/gos0001/goauth/pkg/appconfig"
+import "github.com/gos0001/goauth/v2/pkg/appconfig"
 
 type Config struct {
 	MinPasswordLength int `json:"min_password_len"`

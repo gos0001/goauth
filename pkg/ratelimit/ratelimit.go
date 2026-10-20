@@ -24,7 +24,7 @@ import (
 
 	goredis "github.com/redis/go-redis/v9"
 
-	pkgredis "github.com/gos0001/goauth/pkg/redis"
+	pkgredis "github.com/gos0001/goauth/v2/pkg/redis"
 )
 
 type Limiter struct {

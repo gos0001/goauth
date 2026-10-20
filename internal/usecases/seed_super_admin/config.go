@@ -1,6 +1,6 @@
 package seed_super_admin
 
-import "github.com/gos0001/goauth/pkg/appconfig"
+import "github.com/gos0001/goauth/v2/pkg/appconfig"
 
 type Config struct {
 	// Username and Password bootstrap the first admin, used exactly as given —

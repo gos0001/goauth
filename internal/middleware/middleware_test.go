@@ -11,8 +11,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
-	"github.com/gos0001/goauth/pkg/authcookie"
-	"github.com/gos0001/goauth/pkg/token"
+	"github.com/gos0001/goauth/v2/pkg/authcookie"
+	"github.com/gos0001/goauth/v2/pkg/token"
 )
 
 func init() { gin.SetMode(gin.TestMode) }

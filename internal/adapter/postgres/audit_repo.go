@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/gos0001/goauth/internal/adapter/postgres/generated"
-	"github.com/gos0001/goauth/internal/domain"
+	"github.com/gos0001/goauth/v2/internal/adapter/postgres/generated"
+	"github.com/gos0001/goauth/v2/internal/domain"
 )
 
 func (a *Adapter) InsertAuditEntry(ctx context.Context, e domain.AuditEntry) error {

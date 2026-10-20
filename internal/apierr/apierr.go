@@ -13,8 +13,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
-	"github.com/gos0001/goauth/internal/domain"
-	httpserver "github.com/gos0001/goauth/pkg/http_server"
+	"github.com/gos0001/goauth/v2/internal/domain"
+	httpserver "github.com/gos0001/goauth/v2/pkg/http_server"
 )
 
 // Write maps err onto a response. Unrecognised errors are logged with their

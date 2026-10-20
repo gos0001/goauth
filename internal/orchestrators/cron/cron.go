@@ -12,10 +12,10 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/gos0001/goauth/internal/usecases/audit_cleaner"
-	"github.com/gos0001/goauth/internal/usecases/outbox_cleaner"
-	"github.com/gos0001/goauth/internal/usecases/session_cleaner"
-	"github.com/gos0001/goauth/internal/usecases/webhook_dispatcher"
+	"github.com/gos0001/goauth/v2/internal/usecases/audit_cleaner"
+	"github.com/gos0001/goauth/v2/internal/usecases/outbox_cleaner"
+	"github.com/gos0001/goauth/v2/internal/usecases/session_cleaner"
+	"github.com/gos0001/goauth/v2/internal/usecases/webhook_dispatcher"
 )
 
 // Job is what a use case's cron.go adapts it to.

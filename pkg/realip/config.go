@@ -1,6 +1,6 @@
 package realip
 
-import "github.com/gos0001/goauth/pkg/appconfig"
+import "github.com/gos0001/goauth/v2/pkg/appconfig"
 
 type Config struct {
 	// TrustedProxies accepts CIDRs, bare addresses, or the keywords

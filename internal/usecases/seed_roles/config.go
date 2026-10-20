@@ -1,8 +1,8 @@
 package seed_roles
 
 import (
-	"github.com/gos0001/goauth/internal/domain"
-	"github.com/gos0001/goauth/pkg/appconfig"
+	"github.com/gos0001/goauth/v2/internal/domain"
+	"github.com/gos0001/goauth/v2/pkg/appconfig"
 )
 
 // RoleSeed is one entry of the config file's seed.roles array. It draws the

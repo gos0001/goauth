@@ -9,7 +9,7 @@ import (
 	"context"
 	"fmt"
 
-	postgresadapter "github.com/gos0001/goauth/internal/adapter/postgres"
+	postgresadapter "github.com/gos0001/goauth/v2/internal/adapter/postgres"
 )
 
 type Postgres interface {

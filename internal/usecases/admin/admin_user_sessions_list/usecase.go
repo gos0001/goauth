@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	postgresadapter "github.com/gos0001/goauth/internal/adapter/postgres"
-	"github.com/gos0001/goauth/internal/domain"
+	postgresadapter "github.com/gos0001/goauth/v2/internal/adapter/postgres"
+	"github.com/gos0001/goauth/v2/internal/domain"
 )
 
 type Postgres interface {

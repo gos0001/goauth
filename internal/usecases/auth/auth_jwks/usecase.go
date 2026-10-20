@@ -13,7 +13,7 @@ package auth_jwks
 import (
 	"context"
 
-	"github.com/gos0001/goauth/pkg/token"
+	"github.com/gos0001/goauth/v2/pkg/token"
 )
 
 type Usecase struct {

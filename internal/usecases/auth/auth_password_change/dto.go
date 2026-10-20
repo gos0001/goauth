@@ -3,7 +3,7 @@ package auth_password_change
 import (
 	"time"
 
-	"github.com/gos0001/goauth/internal/domain"
+	"github.com/gos0001/goauth/v2/internal/domain"
 )
 
 type Input struct {

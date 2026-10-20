@@ -16,7 +16,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 
-	pkgpostgres "github.com/gos0001/goauth/pkg/postgres"
+	pkgpostgres "github.com/gos0001/goauth/v2/pkg/postgres"
 )
 
 // Definition is the schema SQL. A named type rather than a bare string so wire

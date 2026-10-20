@@ -7,7 +7,7 @@ package auth_settings
 import (
 	"context"
 
-	"github.com/gos0001/goauth/pkg/appconfig"
+	"github.com/gos0001/goauth/v2/pkg/appconfig"
 )
 
 type Config struct {

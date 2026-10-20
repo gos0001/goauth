@@ -8,8 +8,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/gos0001/goauth/internal/adapter/postgres/generated"
-	"github.com/gos0001/goauth/internal/domain"
+	"github.com/gos0001/goauth/v2/internal/adapter/postgres/generated"
+	"github.com/gos0001/goauth/v2/internal/domain"
 )
 
 type CreateSessionParams struct {

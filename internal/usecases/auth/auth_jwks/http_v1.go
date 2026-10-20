@@ -6,7 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
-	"github.com/gos0001/goauth/internal/apierr"
+	"github.com/gos0001/goauth/v2/internal/apierr"
 )
 
 type HTTPv1 struct {

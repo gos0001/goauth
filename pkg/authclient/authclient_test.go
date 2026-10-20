@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gos0001/goauth/pkg/token"
+	"github.com/gos0001/goauth/v2/pkg/token"
 )
 
 func signerWithSeed(t *testing.T, fill byte) *token.Signer {

@@ -9,11 +9,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
-	"github.com/gos0001/goauth/internal/controller/admin_v1"
-	"github.com/gos0001/goauth/internal/orchestrators/bootstrap"
-	"github.com/gos0001/goauth/internal/orchestrators/cron"
-	pkgpostgres "github.com/gos0001/goauth/pkg/postgres"
-	pkgredis "github.com/gos0001/goauth/pkg/redis"
+	"github.com/gos0001/goauth/v2/internal/controller/admin_v1"
+	"github.com/gos0001/goauth/v2/internal/orchestrators/bootstrap"
+	"github.com/gos0001/goauth/v2/internal/orchestrators/cron"
+	pkgpostgres "github.com/gos0001/goauth/v2/pkg/postgres"
+	pkgredis "github.com/gos0001/goauth/v2/pkg/redis"
 )
 
 type App struct {

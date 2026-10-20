@@ -14,7 +14,7 @@ import (
 
 	"github.com/google/wire"
 
-	"github.com/gos0001/goauth/pkg/dbschema"
+	"github.com/gos0001/goauth/v2/pkg/dbschema"
 )
 
 //go:embed schema.sql

@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gos0001/goauth/internal/domain"
-	"github.com/gos0001/goauth/internal/service/tokens"
+	"github.com/gos0001/goauth/v2/internal/domain"
+	"github.com/gos0001/goauth/v2/internal/service/tokens"
 )
 
 // Fakes are plain structs in the same package, per the project's testing

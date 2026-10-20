@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/gos0001/goauth/internal/domain"
+	"github.com/gos0001/goauth/v2/internal/domain"
 )
 
 // The whole point of the hierarchy: an admin must not be able to block,

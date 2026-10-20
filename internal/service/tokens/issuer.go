@@ -15,9 +15,9 @@ import (
 
 	"github.com/google/uuid"
 
-	postgresadapter "github.com/gos0001/goauth/internal/adapter/postgres"
-	"github.com/gos0001/goauth/internal/domain"
-	"github.com/gos0001/goauth/pkg/token"
+	postgresadapter "github.com/gos0001/goauth/v2/internal/adapter/postgres"
+	"github.com/gos0001/goauth/v2/internal/domain"
+	"github.com/gos0001/goauth/v2/pkg/token"
 )
 
 // refreshTokenBytes is the entropy of an opaque refresh token. Refresh tokens

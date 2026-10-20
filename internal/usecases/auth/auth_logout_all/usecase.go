@@ -3,9 +3,9 @@ package auth_logout_all
 import (
 	"context"
 
-	postgresadapter "github.com/gos0001/goauth/internal/adapter/postgres"
-	"github.com/gos0001/goauth/internal/domain"
-	"github.com/gos0001/goauth/internal/service/audit"
+	postgresadapter "github.com/gos0001/goauth/v2/internal/adapter/postgres"
+	"github.com/gos0001/goauth/v2/internal/domain"
+	"github.com/gos0001/goauth/v2/internal/service/audit"
 )
 
 type Postgres interface {

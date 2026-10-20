@@ -7,7 +7,7 @@ package admin_v1
 import (
 	"github.com/gin-gonic/gin"
 
-	"github.com/gos0001/goauth/internal/middleware"
+	"github.com/gos0001/goauth/v2/internal/middleware"
 )
 
 // Router wraps the private engine. Engine is nil when ADMIN_TOKEN is unset, in

@@ -1,6 +1,6 @@
 # Project layout — who owns which file
 
-Import paths below are relative to `github.com/gos0001/goauth`.
+Import paths below are relative to `github.com/gos0001/goauth/v2`.
 
 ## Dependency direction
 

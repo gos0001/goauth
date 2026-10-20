@@ -3,19 +3,19 @@ package http_v1
 import (
 	"github.com/gin-gonic/gin"
 
-	"github.com/gos0001/goauth/internal/controller/admin_v1"
-	"github.com/gos0001/goauth/internal/middleware"
-	"github.com/gos0001/goauth/internal/usecases/auth/auth_jwks"
-	"github.com/gos0001/goauth/internal/usecases/auth/auth_logout_all"
-	"github.com/gos0001/goauth/internal/usecases/auth/auth_me"
-	"github.com/gos0001/goauth/internal/usecases/auth/auth_password_change"
-	"github.com/gos0001/goauth/internal/usecases/auth/auth_register"
-	"github.com/gos0001/goauth/internal/usecases/auth/auth_revoke"
-	"github.com/gos0001/goauth/internal/usecases/auth/auth_settings"
-	"github.com/gos0001/goauth/internal/usecases/auth/auth_token"
-	"github.com/gos0001/goauth/internal/usecases/auth/session_list"
-	"github.com/gos0001/goauth/internal/usecases/sys/sys_health"
-	"github.com/gos0001/goauth/pkg/cors"
+	"github.com/gos0001/goauth/v2/internal/controller/admin_v1"
+	"github.com/gos0001/goauth/v2/internal/middleware"
+	"github.com/gos0001/goauth/v2/internal/usecases/auth/auth_jwks"
+	"github.com/gos0001/goauth/v2/internal/usecases/auth/auth_logout_all"
+	"github.com/gos0001/goauth/v2/internal/usecases/auth/auth_me"
+	"github.com/gos0001/goauth/v2/internal/usecases/auth/auth_password_change"
+	"github.com/gos0001/goauth/v2/internal/usecases/auth/auth_register"
+	"github.com/gos0001/goauth/v2/internal/usecases/auth/auth_revoke"
+	"github.com/gos0001/goauth/v2/internal/usecases/auth/auth_settings"
+	"github.com/gos0001/goauth/v2/internal/usecases/auth/auth_token"
+	"github.com/gos0001/goauth/v2/internal/usecases/auth/session_list"
+	"github.com/gos0001/goauth/v2/internal/usecases/sys/sys_health"
+	"github.com/gos0001/goauth/v2/pkg/cors"
 	// codegen:imports
 )
 

@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"strings"
 
-	postgresadapter "github.com/gos0001/goauth/internal/adapter/postgres"
-	"github.com/gos0001/goauth/internal/domain"
-	"github.com/gos0001/goauth/internal/service/audit"
-	"github.com/gos0001/goauth/internal/service/roleguard"
-	"github.com/gos0001/goauth/pkg/appconfig"
-	"github.com/gos0001/goauth/pkg/passwordhash"
+	postgresadapter "github.com/gos0001/goauth/v2/internal/adapter/postgres"
+	"github.com/gos0001/goauth/v2/internal/domain"
+	"github.com/gos0001/goauth/v2/internal/service/audit"
+	"github.com/gos0001/goauth/v2/internal/service/roleguard"
+	"github.com/gos0001/goauth/v2/pkg/appconfig"
+	"github.com/gos0001/goauth/v2/pkg/passwordhash"
 )
 
 type Config struct {

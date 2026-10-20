@@ -6,7 +6,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/gos0001/goauth/pkg/webhook"
+	"github.com/gos0001/goauth/v2/pkg/webhook"
 )
 
 type CronJob struct {

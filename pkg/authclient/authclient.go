@@ -26,7 +26,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
-	"github.com/gos0001/goauth/pkg/token"
+	"github.com/gos0001/goauth/v2/pkg/token"
 )
 
 var (

@@ -1,6 +1,6 @@
 package http_v1
 
-import "github.com/gos0001/goauth/pkg/ratelimit"
+import "github.com/gos0001/goauth/v2/pkg/ratelimit"
 
 // Limits carries the rate-limit rules the router attaches to the credential
 // endpoints. It exists so the controller reads rules rather than configuration —

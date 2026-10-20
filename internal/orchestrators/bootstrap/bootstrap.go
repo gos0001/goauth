@@ -8,9 +8,9 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/gos0001/goauth/internal/usecases/seed_roles"
-	"github.com/gos0001/goauth/internal/usecases/seed_super_admin"
-	"github.com/gos0001/goauth/pkg/dbschema"
+	"github.com/gos0001/goauth/v2/internal/usecases/seed_roles"
+	"github.com/gos0001/goauth/v2/internal/usecases/seed_super_admin"
+	"github.com/gos0001/goauth/v2/pkg/dbschema"
 )
 
 type Bootstrap struct {

@@ -2,7 +2,7 @@ package logger
 
 import (
 	"github.com/google/wire"
-	"github.com/gos0001/goauth/pkg/appconfig"
+	"github.com/gos0001/goauth/v2/pkg/appconfig"
 )
 
 func LoadConfig(root appconfig.Config) (Config, error) {

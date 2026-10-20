@@ -1,6 +1,6 @@
 package auth_token
 
-import "github.com/gos0001/goauth/pkg/appconfig"
+import "github.com/gos0001/goauth/v2/pkg/appconfig"
 
 type Config struct {
 	// FailClosed makes an unreachable Redis reject login attempts rather than

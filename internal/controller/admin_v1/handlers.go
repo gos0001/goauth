@@ -3,19 +3,19 @@ package admin_v1
 import (
 	"github.com/gin-gonic/gin"
 
-	"github.com/gos0001/goauth/internal/usecases/admin/admin_audit_list"
-	"github.com/gos0001/goauth/internal/usecases/admin/admin_role_create"
-	"github.com/gos0001/goauth/internal/usecases/admin/admin_role_delete"
-	"github.com/gos0001/goauth/internal/usecases/admin/admin_role_list"
-	"github.com/gos0001/goauth/internal/usecases/admin/admin_role_update"
-	"github.com/gos0001/goauth/internal/usecases/admin/admin_user_create"
-	"github.com/gos0001/goauth/internal/usecases/admin/admin_user_delete"
-	"github.com/gos0001/goauth/internal/usecases/admin/admin_user_get"
-	"github.com/gos0001/goauth/internal/usecases/admin/admin_user_list"
-	"github.com/gos0001/goauth/internal/usecases/admin/admin_user_sessions_list"
-	"github.com/gos0001/goauth/internal/usecases/admin/admin_user_sessions_revoke"
-	"github.com/gos0001/goauth/internal/usecases/admin/admin_user_set_password"
-	"github.com/gos0001/goauth/internal/usecases/admin/admin_user_update"
+	"github.com/gos0001/goauth/v2/internal/usecases/admin/admin_audit_list"
+	"github.com/gos0001/goauth/v2/internal/usecases/admin/admin_role_create"
+	"github.com/gos0001/goauth/v2/internal/usecases/admin/admin_role_delete"
+	"github.com/gos0001/goauth/v2/internal/usecases/admin/admin_role_list"
+	"github.com/gos0001/goauth/v2/internal/usecases/admin/admin_role_update"
+	"github.com/gos0001/goauth/v2/internal/usecases/admin/admin_user_create"
+	"github.com/gos0001/goauth/v2/internal/usecases/admin/admin_user_delete"
+	"github.com/gos0001/goauth/v2/internal/usecases/admin/admin_user_get"
+	"github.com/gos0001/goauth/v2/internal/usecases/admin/admin_user_list"
+	"github.com/gos0001/goauth/v2/internal/usecases/admin/admin_user_sessions_list"
+	"github.com/gos0001/goauth/v2/internal/usecases/admin/admin_user_sessions_revoke"
+	"github.com/gos0001/goauth/v2/internal/usecases/admin/admin_user_set_password"
+	"github.com/gos0001/goauth/v2/internal/usecases/admin/admin_user_update"
 )
 
 // Handlers is the admin surface, gathered once so that the same set of routes

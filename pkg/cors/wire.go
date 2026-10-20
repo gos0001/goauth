@@ -3,7 +3,7 @@ package cors
 import (
 	"github.com/google/wire"
 
-	"github.com/gos0001/goauth/pkg/authcookie"
+	"github.com/gos0001/goauth/v2/pkg/authcookie"
 )
 
 // NewWithCookies ties AllowCredentials to the authcookie channel: credentials

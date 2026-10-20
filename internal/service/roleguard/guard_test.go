@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/gos0001/goauth/internal/domain"
+	"github.com/gos0001/goauth/v2/internal/domain"
 )
 
 type fakePostgres struct {

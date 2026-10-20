@@ -12,7 +12,7 @@ description: >
 # goauth
 
 > **ALWAYS active in this repository. Never skip these rules.**
-> Module: `github.com/gos0001/goauth`.
+> Module: `github.com/gos0001/goauth/v2`.
 > Exception: throwaway spikes on a scratch branch — everything else follows this.
 
 ## Core Rules (always apply)

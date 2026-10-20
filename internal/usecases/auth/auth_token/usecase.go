@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"time"
 
-	postgresadapter "github.com/gos0001/goauth/internal/adapter/postgres"
-	"github.com/gos0001/goauth/internal/domain"
-	"github.com/gos0001/goauth/internal/service/audit"
-	"github.com/gos0001/goauth/internal/service/tokens"
-	"github.com/gos0001/goauth/pkg/passwordhash"
-	"github.com/gos0001/goauth/pkg/ratelimit"
+	postgresadapter "github.com/gos0001/goauth/v2/internal/adapter/postgres"
+	"github.com/gos0001/goauth/v2/internal/domain"
+	"github.com/gos0001/goauth/v2/internal/service/audit"
+	"github.com/gos0001/goauth/v2/internal/service/tokens"
+	"github.com/gos0001/goauth/v2/pkg/passwordhash"
+	"github.com/gos0001/goauth/v2/pkg/ratelimit"
 )
 
 // ErrTooManyAttempts is returned while an account is inside its backoff window.
