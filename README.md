@@ -40,7 +40,7 @@ services:
       retries: 5
 
   auth:
-    image: ghcr.io/gos0001/goauth:1
+    image: ghcr.io/gos0001/goauth:2
     volumes:
       - ./config.json:/config.json:ro
     command: ["-config", "/config.json"]
