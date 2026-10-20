@@ -26,6 +26,7 @@ func (h *HTTPv1) Handle(c *gin.Context) {
 
 	in.ID = c.Param("id")
 	in.Actor = httpserver.Actor(c)
+	in.ActorUserID = httpserver.UserID(c)
 	in.IP = httpserver.ClientIP(c)
 
 	if err := in.Validate(); err != nil {

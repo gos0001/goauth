@@ -48,14 +48,15 @@ which is how a 30-parameter constructor becomes unreadable.
 cmd/                          entrypoint; graceful shutdown lives in app.go
 internal/domain/              models + sentinel errors; no tags, no imports out
 internal/usecases/            business logic, one package per use case
-internal/service/             shared domain services (token issuing, audit)
-internal/middleware/          real IP, rate limiting, auth and admin guards
+internal/service/             shared domain services (tokens, audit, roleguard)
+internal/middleware/          real IP, rate limiting, auth and permission guards
 internal/controller/http_v1/  public JSON routes; routing only
 internal/controller/admin_v1/ admin routes, mounted on both listeners
 internal/adapter/postgres/    queries/*.sql, generated/, MapError
 internal/adapter/redis/       cache storage
-internal/orchestrators/       startup work that runs before the listeners open
+internal/orchestrators/       startup work: schema → seed roles → seed super admin
 pkg/                          logger, http_server, token, passwordhash, realip,
-                              ratelimit, migrator, authclient, postgres, redis
-migrations/                   NNNNNN_name.up.sql / .down.sql + embed.go
+                              ratelimit, appconfig, authclient, postgres, redis
+schema/                       schema.sql (idempotent, applied at startup) + embed.go
+config.example.json           every config key with its default; config.json is gitignored
 ```

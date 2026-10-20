@@ -62,7 +62,7 @@ func call(r *gin.Engine, path, bearer string) *httptest.ResponseRecorder {
 
 func mint(t *testing.T, s *token.Signer, issuedAt time.Time) string {
 	t.Helper()
-	raw, _, _, err := s.Sign("user-1", "session-1", true, issuedAt, issuedAt)
+	raw, _, _, err := s.Sign("user-1", "session-1", "superadmin", issuedAt, issuedAt)
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}

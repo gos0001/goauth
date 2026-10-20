@@ -72,7 +72,7 @@ func TestVerifiesIssuedToken(t *testing.T) {
 	v := verifier(t, srv.URL)
 
 	now := time.Now()
-	raw, jti, _, err := s.Sign("user-1", "session-1", true, now, now)
+	raw, jti, _, err := s.Sign("user-1", "session-1", "superadmin", now, now)
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}
@@ -91,8 +91,8 @@ func TestVerifiesIssuedToken(t *testing.T) {
 	if claims.TokenID != jti {
 		t.Errorf("TokenID = %q, want %q", claims.TokenID, jti)
 	}
-	if !claims.Admin {
-		t.Error("Admin flag lost")
+	if claims.Role != "superadmin" {
+		t.Error("Role claim lost")
 	}
 }
 
@@ -109,7 +109,7 @@ func TestVerifiesWithIssuerOffline(t *testing.T) {
 	v := verifier(t, srv.URL)
 
 	now := time.Now()
-	raw, _, _, _ := s.Sign("user-1", "session-1", false, now, now)
+	raw, _, _, _ := s.Sign("user-1", "session-1", "user", now, now)
 
 	if _, err := v.Verify(context.Background(), raw); err != nil {
 		t.Fatalf("first verify: %v", err)
@@ -142,7 +142,7 @@ func TestKeySetIsCachedAcrossRequests(t *testing.T) {
 
 	now := time.Now()
 	for i := 0; i < 10; i++ {
-		raw, _, _, _ := s.Sign("user-1", "session-1", false, now, now)
+		raw, _, _, _ := s.Sign("user-1", "session-1", "user", now, now)
 		if _, err := v.Verify(context.Background(), raw); err != nil {
 			t.Fatalf("verify %d: %v", i, err)
 		}
@@ -166,7 +166,7 @@ func TestUnknownKidTriggersRefresh(t *testing.T) {
 	v := verifier(t, srv.URL)
 
 	now := time.Now()
-	rawOld, _, _, _ := oldSigner.Sign("user-1", "session-1", false, now, now)
+	rawOld, _, _, _ := oldSigner.Sign("user-1", "session-1", "user", now, now)
 	if _, err := v.Verify(context.Background(), rawOld); err != nil {
 		t.Fatalf("verify with the original key: %v", err)
 	}
@@ -186,7 +186,7 @@ func TestUnknownKidTriggersRefresh(t *testing.T) {
 	rotatedDoc := rotated.JWKS()
 	doc.Store(&rotatedDoc)
 
-	rawNew, _, _, _ := newSigner.Sign("user-2", "session-2", false, now, now)
+	rawNew, _, _, _ := newSigner.Sign("user-2", "session-2", "user", now, now)
 
 	before := hits.Load()
 	claims, err := v.Verify(context.Background(), rawNew)
@@ -220,7 +220,7 @@ func TestUnknownKidRefreshIsThrottled(t *testing.T) {
 	v := verifier(t, srv.URL)
 
 	now := time.Now()
-	rogue, _, _, _ := foreign.Sign("attacker", "session-x", true, now, now)
+	rogue, _, _, _ := foreign.Sign("attacker", "session-x", "superadmin", now, now)
 
 	for i := 0; i < 20; i++ {
 		if _, err := v.Verify(context.Background(), rogue); err == nil {
@@ -247,7 +247,7 @@ func TestRejectsWrongAudience(t *testing.T) {
 	}
 
 	now := time.Now()
-	raw, _, _, _ := s.Sign("user-1", "session-1", false, now, now)
+	raw, _, _, _ := s.Sign("user-1", "session-1", "user", now, now)
 
 	if _, err := v.Verify(context.Background(), raw); err == nil {
 		t.Fatal("a token minted for another audience verified")
@@ -265,7 +265,7 @@ func TestRejectsExpiredAndMissing(t *testing.T) {
 	v := verifier(t, srv.URL)
 
 	past := time.Now().Add(-time.Hour)
-	raw, _, _, _ := s.Sign("user-1", "session-1", false, past, past)
+	raw, _, _, _ := s.Sign("user-1", "session-1", "user", past, past)
 
 	if _, err := v.Verify(context.Background(), raw); !errors.Is(err, ErrExpired) {
 		t.Fatalf("err = %v, want ErrExpired", err)

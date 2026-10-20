@@ -1,9 +1,10 @@
 package token
 
 import (
+	"errors"
 	"time"
 
-	"github.com/kelseyhightower/envconfig"
+	"github.com/gos0001/goauth/pkg/appconfig"
 )
 
 type Config struct {
@@ -11,22 +12,32 @@ type Config struct {
 	// auto-generated ephemeral key would silently invalidate every issued token
 	// on restart, which is a far worse failure than refusing to boot.
 	// Generate one with `make jwt-key`.
-	PrivateKey string `envconfig:"JWT_PRIVATE_KEY" required:"true"`
+	PrivateKey string `json:"private_key"`
 
 	// PreviousPublicKeys are base64-encoded 32-byte public keys that are still
 	// published in the JWKS and still accepted for verification, but never used
 	// for signing. This is what makes key rotation a two-step deploy with no
 	// downtime and no coordination with consumers.
-	PreviousPublicKeys []string `envconfig:"JWT_PREVIOUS_PUBLIC_KEYS"`
+	PreviousPublicKeys []string `json:"previous_public_keys"`
 
-	Issuer   string `envconfig:"JWT_ISSUER"   default:"goauth"`
-	Audience string `envconfig:"JWT_AUDIENCE" default:"goauth"`
-
-	AccessTTL  time.Duration `envconfig:"JWT_ACCESS_TTL"  default:"15m"`
-	RefreshTTL time.Duration `envconfig:"JWT_REFRESH_TTL" default:"720h"`
+	Issuer     string        `json:"issuer"`
+	Audience   string        `json:"audience"`
+	AccessTTL  time.Duration `json:"access_ttl"`
+	RefreshTTL time.Duration `json:"refresh_ttl"`
 }
 
-func LoadConfig() (Config, error) {
-	var cfg Config
-	return cfg, envconfig.Process("", &cfg)
+func LoadConfig(root appconfig.Config) (Config, error) {
+	cfg := Config{
+		Issuer:     "goauth",
+		Audience:   "goauth",
+		AccessTTL:  15 * time.Minute,
+		RefreshTTL: 720 * time.Hour,
+	}
+	if err := root.Section("token", &cfg); err != nil {
+		return Config{}, err
+	}
+	if cfg.PrivateKey == "" {
+		return Config{}, errors.New("token.private_key is required")
+	}
+	return cfg, nil
 }

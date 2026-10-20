@@ -24,6 +24,7 @@ func (h *HTTPv1) Handle(c *gin.Context) {
 		return
 	}
 
+	in.ActorUserID = httpserver.UserID(c)
 	in.Actor = httpserver.Actor(c)
 	in.IP = httpserver.ClientIP(c)
 

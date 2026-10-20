@@ -7,11 +7,17 @@ import (
 	postgresadapter "github.com/gos0001/goauth/internal/adapter/postgres"
 	"github.com/gos0001/goauth/internal/domain"
 	"github.com/gos0001/goauth/internal/service/audit"
+	"github.com/gos0001/goauth/internal/service/roleguard"
 )
 
 type Postgres interface {
 	GetUserByID(ctx context.Context, id string) (domain.User, error)
+	GetRole(ctx context.Context, name string) (domain.Role, error)
 	DeleteUserSessions(ctx context.Context, userID string) (int, error)
+}
+
+type Guard interface {
+	Actor(ctx context.Context, actorUserID string) (domain.Role, error)
 }
 
 type Auditor interface {
@@ -20,11 +26,12 @@ type Auditor interface {
 
 type Usecase struct {
 	postgres Postgres
+	guard    Guard
 	auditor  Auditor
 }
 
-func New(pg *postgresadapter.Adapter, auditor *audit.Recorder) *Usecase {
-	return &Usecase{postgres: pg, auditor: auditor}
+func New(pg *postgresadapter.Adapter, guard *roleguard.Guard, auditor *audit.Recorder) *Usecase {
+	return &Usecase{postgres: pg, guard: guard, auditor: auditor}
 }
 
 // Execute logs a user out everywhere without touching their credentials — the
@@ -36,6 +43,20 @@ func New(pg *postgresadapter.Adapter, auditor *audit.Recorder) *Usecase {
 func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) {
 	user, err := uc.postgres.GetUserByID(ctx, in.UserID)
 	if err != nil {
+		return Output{}, err
+	}
+
+	// Logging a peer out everywhere is a denial-of-service against them;
+	// the same strict rank rule as every other management action applies.
+	actor, err := uc.guard.Actor(ctx, in.ActorUserID)
+	if err != nil {
+		return Output{}, err
+	}
+	targetRole, err := uc.postgres.GetRole(ctx, user.Role)
+	if err != nil {
+		return Output{}, err
+	}
+	if err := roleguard.CanActOnUser(actor, targetRole.Rank); err != nil {
 		return Output{}, err
 	}
 
@@ -52,8 +73,10 @@ func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) {
 
 type Input struct {
 	UserID string `json:"-"`
-	Actor  string `json:"-"`
-	IP     string `json:"-"`
+
+	ActorUserID string `json:"-"`
+	Actor       string `json:"-"`
+	IP          string `json:"-"`
 }
 
 func (in *Input) Validate() error {

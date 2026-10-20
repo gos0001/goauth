@@ -3,7 +3,7 @@ package session_cleaner
 import (
 	"time"
 
-	"github.com/kelseyhightower/envconfig"
+	"github.com/gos0001/goauth/pkg/appconfig"
 )
 
 type Config struct {
@@ -12,10 +12,13 @@ type Config struct {
 	// There is no retention setting to go with it: a session already carries its
 	// own expires_at, so "expired" is not a policy decision to be configured
 	// twice.
-	Interval time.Duration `envconfig:"SESSION_CLEANUP_INTERVAL" default:"1h"`
+	Interval time.Duration `json:"cleanup_interval"`
 }
 
-func LoadConfig() (Config, error) {
-	var cfg Config
-	return cfg, envconfig.Process("", &cfg)
+func LoadConfig(root appconfig.Config) (Config, error) {
+	cfg := Config{Interval: time.Hour}
+	if err := root.Section("sessions", &cfg); err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
 }

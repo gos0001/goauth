@@ -1,12 +1,22 @@
 package redis
 
-import "github.com/kelseyhightower/envconfig"
+import (
+	"errors"
+
+	"github.com/gos0001/goauth/pkg/appconfig"
+)
 
 type Config struct {
-	URL string `envconfig:"REDIS_URL" required:"true"`
+	URL string `json:"url"`
 }
 
-func LoadConfig() (Config, error) {
-	var cfg Config
-	return cfg, envconfig.Process("", &cfg)
+func LoadConfig(root appconfig.Config) (Config, error) {
+	cfg := Config{}
+	if err := root.Section("redis", &cfg); err != nil {
+		return Config{}, err
+	}
+	if cfg.URL == "" {
+		return Config{}, errors.New("redis.url is required")
+	}
+	return cfg, nil
 }

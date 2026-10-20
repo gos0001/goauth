@@ -1,7 +1,7 @@
 .PHONY: dev build run generate wire test lint build-prod tools sqlc docker-up docker-down jwt-key admin-token image image-push image-login image-run
 
 APP_BIN := ./bin/app
-ENV_FILE := .env.development
+CONFIG_FILE := config.json
 
 # Container image. Override any of these on the command line:
 #   make image-push VERSION=v1.0.0
@@ -19,7 +19,7 @@ dev:
 	@air
 
 run:
-	@export $$(cat $(ENV_FILE) | grep -v '^#' | xargs) && go run ./cmd
+	@go run ./cmd -config $(CONFIG_FILE)
 
 build:
 	@go build -o $(APP_BIN) ./cmd
@@ -77,11 +77,8 @@ image-push:
 # Run the locally built image against the compose Postgres and Redis.
 image-run:
 	@docker run --rm -it --network goauth_default -p 8080:8080 \
-		--env-file $(ENV_FILE) \
-		-e POSTGRES_URL=postgres://postgres:postgres@postgres:5432/goauth_dev?sslmode=disable \
-		-e REDIS_URL=redis://redis:6379 \
-		-e ADMIN_ADDR=0.0.0.0:8081 \
-		$(IMAGE):dev
+		-v $$(pwd)/$(CONFIG_FILE):/config.json:ro \
+		$(IMAGE):dev -config /config.json
 
 # Ed25519 signing seed for JWT_PRIVATE_KEY. One per environment — never reuse a
 # development key in production.

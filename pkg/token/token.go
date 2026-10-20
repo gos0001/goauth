@@ -36,11 +36,11 @@ type Claims struct {
 	// so revoking the session can be enforced where it matters.
 	SessionID string `json:"sid"`
 
-	// Admin is a hint for the frontend — it decides whether to render the user
+	// Role is a hint for the frontend — it decides whether to render the user
 	// management screens. It is NOT an authorisation decision: goauth's own
-	// admin middleware re-reads is_admin from the database, because a demoted
-	// admin would otherwise keep power until this token expired.
-	Admin bool `json:"adm"`
+	// admin middleware re-reads the role from the database, because a demoted
+	// administrator would otherwise keep power until this token expired.
+	Role string `json:"role"`
 
 	// AuthTime is when the password was last presented, used for the sudo-mode
 	// re-authentication window on destructive admin operations.
@@ -118,13 +118,13 @@ func (s *Signer) PublicKeyBase64() string {
 }
 
 // Sign issues an access token for a user and session.
-func (s *Signer) Sign(userID, sessionID string, admin bool, authTime time.Time, now time.Time) (string, string, time.Time, error) {
+func (s *Signer) Sign(userID, sessionID, role string, authTime time.Time, now time.Time) (string, string, time.Time, error) {
 	jti := uuid.NewString()
 	expiresAt := now.Add(s.cfg.AccessTTL)
 
 	claims := Claims{
 		SessionID: sessionID,
-		Admin:     admin,
+		Role:      role,
 		AuthTime:  authTime.Unix(),
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    s.cfg.Issuer,

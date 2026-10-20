@@ -72,11 +72,12 @@ func New(
 	}
 
 	// The same admin handlers the private listener serves, reached here with a
-	// JWT whose is_admin flag is re-read from the database on every request.
+	// JWT whose role is re-read from the database on every request.
 	// This is the path the panel frontend uses; the static admin token is never
 	// accepted on the public listener, because a browser cannot hold one safely.
 	admin_v1.RegisterRoutes(r,
-		[]gin.HandlerFunc{mw.AuthSilent(), mw.AdminJWT()},
+		mw.AuthSilent(),
+		mw.RequireScope,
 		mw.RequireRecentAuth(),
 		adminHandlers,
 	)

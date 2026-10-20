@@ -21,20 +21,22 @@ make docker-down
 ```
 
 Running the dependencies in compose while the app runs on the host is the usual
-loop: fastest rebuilds, and `.env.development` already points at `localhost`.
+loop: fastest rebuilds, and `config.json` points at `localhost`.
 
 ## Networking
 
-Inside compose, services reach each other by service name, so the app service
-overrides the connection strings:
+Inside compose, services reach each other by service name, so the app's
+`config.json` swaps the hosts:
 
 ```
-POSTGRES_URL  → postgres://postgres:postgres@postgres:5432/goauth_dev
-REDIS_URL     → redis://redis:6379
+db.url    → postgres://postgres:postgres@postgres:5432/goauth_dev
+redis.url → redis://redis:6379
 ```
 
-On the host these stay `localhost`. That is the only difference between the two
-setups.
+On the host these stay `localhost`, and `app.admin_addr` must become
+`0.0.0.0:8081` inside a container — 127.0.0.1 there is the container's own
+loopback, unreachable from siblings. That is the only difference between the
+two setups, and the port simply stays unpublished.
 
 ## Production build
 

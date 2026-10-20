@@ -9,10 +9,9 @@ tmp/
 # Real signing keys and admin tokens live here. They never reach the final image
 # (only the binary is copied forward) but they would land in a build layer and
 # in the shared build cache.
-.env
-.env.*
-!.env.example
-*.local.env
+config.json
+config.*.json
+!config.example.json
 
 Dockerfile*
 docker-compose.yml

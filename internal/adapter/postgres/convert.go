@@ -53,7 +53,29 @@ func boolIn(b *bool) pgtype.Bool {
 	return pgtype.Bool{Bool: *b, Valid: true}
 }
 
+// textIn is text for nullable columns: nil pointer and empty string both mean
+// "leave the column alone", which is what a partial update wants.
+func textIn(s *string) pgtype.Text {
+	if s == nil || *s == "" {
+		return pgtype.Text{}
+	}
+	return pgtype.Text{String: *s, Valid: true}
+}
+
 func uuidText(id uuid.UUID) string { return id.String() }
+
+// parseUUID is the adapter's front door for ids arriving as strings from the
+// transport: a malformed one means "no such row", never an internal error.
+func parseUUID(s string) (uuid.UUID, error) {
+	return uuid.Parse(s)
+}
+
+func int32Ptr(i *int) pgtype.Int4 {
+	if i == nil {
+		return pgtype.Int4{}
+	}
+	return pgtype.Int4{Int32: int32(*i), Valid: true}
+}
 
 func pgUUID(id string) (pgtype.UUID, error) {
 	if id == "" {

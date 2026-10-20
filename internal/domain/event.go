@@ -32,8 +32,7 @@ const (
 	EventUserUnblocked       = "user.unblocked"
 	EventUserDeleted         = "user.deleted"
 	EventUserPasswordChanged = "user.password_changed"
-	EventAdminGranted        = "user.admin_granted"
-	EventAdminRevoked        = "user.admin_revoked"
+	EventRoleAssigned        = "user.role_assigned"
 )
 
 // NewUserEvent builds the payload every consumer needs to maintain its own copy
@@ -49,7 +48,7 @@ func NewUserEvent(event string, u User) OutboxEvent {
 			"username":   u.Username,
 			"email":      u.Email,
 			"status":     string(u.Status),
-			"is_admin":   u.IsAdmin,
+			"role":       u.Role,
 			"created_at": u.CreatedAt,
 			"updated_at": u.UpdatedAt,
 		},

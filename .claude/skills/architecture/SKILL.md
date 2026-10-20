@@ -26,7 +26,7 @@ description: >
 7. **Errors flow one way.** Adapter maps storage errors to domain errors; handler maps domain errors to HTTP status with `errors.Is`. Never leak an adapter error past the adapter.
 8. **Handlers respond through `pkg/http_server`.** ⛔ **NEVER call `c.JSON` directly** — the `{"data":...}` / `{"error":...}` shape is the API contract. The one exception is the JWKS endpoint, which must serve the standard document generic clients expect.
 9. **Controller only routes.** Route to handler. No logic, no domain types, no adapters.
-10. **`pkg/` never imports `internal/domain`,** and config lives per package via envconfig in that package's own `config.go`. No global config struct.
+10. **`pkg/` never imports `internal/domain`,** and all configuration comes from one `config.json` loaded by `pkg/appconfig`. Each package keeps its own `Config` struct with `json` tags and a `LoadConfig(root appconfig.Config)` that pre-fills defaults and decodes its section with `root.Section("name", &cfg)`. No environment variables, no global config struct.
 
 ## Never edit by hand
 
@@ -43,18 +43,18 @@ are and insert directly above them, so the files stay in a predictable shape.
 goauth/
 ├── cmd/                     main.go, app.go, config.go, wire.go, wire_gen.go
 ├── internal/
-│   ├── domain/              pure models + sentinel errors
+│   ├── domain/              pure models + sentinel errors (User, Role, Permission)
 │   ├── usecases/            one package per use case, grouped by entity
-│   ├── service/             shared domain services (token issuing, audit)
-│   ├── middleware/          real IP, rate limit, auth and admin guards
+│   ├── service/             shared domain services (token issuing, audit, roleguard)
+│   ├── middleware/          real IP, rate limit, auth and permission guards
 │   ├── controller/http_v1/  public JSON API routes
 │   ├── controller/admin_v1/ admin routes + the private listener
 │   ├── adapter/postgres/    queries/, generated/, MapError
 │   ├── adapter/redis/       cache storage
 │   └── orchestrators/       startup work that runs before the listeners open
 ├── pkg/                     logger, http_server, token, passwordhash, realip,
-│                            ratelimit, migrator, authclient, postgres, redis
-├── migrations/              golang-migrate .up/.down pairs + embed.go
+│                            ratelimit, appconfig, authclient, postgres, redis
+├── schema/                  schema.sql (idempotent, applied at startup) + embed.go
 ├── sqlc.yaml
 ├── docker-compose.yml, Dockerfile, Dockerfile.dev
 └── Makefile
@@ -69,8 +69,8 @@ Read these when working on each layer:
 - Adding a use case, step by step: `@sections/adding-a-usecase.md`
 - Wire DI contract: `@sections/wire.md`
 - Domain models, errors, HTTP responses: `@sections/domain-errors.md`
-- Daily workflow — make, env, dev loop: `@sections/workflow.md`
+- Daily workflow — make, config, dev loop: `@sections/workflow.md`
 - Gotchas and failure modes: `@sections/gotchas.md`
-- Postgres, sqlc, migrations: `@sections/postgres.md`
+- Postgres, sqlc, schema: `@sections/postgres.md`
 - Redis: `@sections/redis.md`
 - Docker and compose: `@sections/docker.md`

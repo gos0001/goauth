@@ -14,8 +14,13 @@ import (
 	"github.com/gos0001/goauth/internal/orchestrators/bootstrap"
 	"github.com/gos0001/goauth/internal/orchestrators/cron"
 	"github.com/gos0001/goauth/internal/service/audit"
+	"github.com/gos0001/goauth/internal/service/roleguard"
 	"github.com/gos0001/goauth/internal/service/tokens"
 	"github.com/gos0001/goauth/internal/usecases/admin/admin_audit_list"
+	"github.com/gos0001/goauth/internal/usecases/admin/admin_role_create"
+	"github.com/gos0001/goauth/internal/usecases/admin/admin_role_delete"
+	"github.com/gos0001/goauth/internal/usecases/admin/admin_role_list"
+	"github.com/gos0001/goauth/internal/usecases/admin/admin_role_update"
 	"github.com/gos0001/goauth/internal/usecases/admin/admin_user_create"
 	"github.com/gos0001/goauth/internal/usecases/admin/admin_user_delete"
 	"github.com/gos0001/goauth/internal/usecases/admin/admin_user_get"
@@ -35,10 +40,12 @@ import (
 	"github.com/gos0001/goauth/internal/usecases/auth/auth_token"
 	"github.com/gos0001/goauth/internal/usecases/auth/session_list"
 	"github.com/gos0001/goauth/internal/usecases/outbox_cleaner"
+	"github.com/gos0001/goauth/internal/usecases/seed_roles"
 	"github.com/gos0001/goauth/internal/usecases/seed_super_admin"
 	"github.com/gos0001/goauth/internal/usecases/session_cleaner"
 	"github.com/gos0001/goauth/internal/usecases/sys/sys_health"
 	"github.com/gos0001/goauth/internal/usecases/webhook_dispatcher"
+	"github.com/gos0001/goauth/pkg/appconfig"
 	"github.com/gos0001/goauth/pkg/authcookie"
 	"github.com/gos0001/goauth/pkg/cors"
 	"github.com/gos0001/goauth/pkg/dbschema"
@@ -55,16 +62,20 @@ import (
 
 // Injectors from wire.go:
 
-func InitializeApp() (*App, error) {
-	config, err := logger.LoadConfig()
+func InitializeApp(configPath string) (*App, error) {
+	config, err := appconfig.Load(configPath)
 	if err != nil {
 		return nil, err
 	}
-	sugaredLogger, err := logger.New(config)
+	loggerConfig, err := logger.LoadConfig(config)
 	if err != nil {
 		return nil, err
 	}
-	realipConfig, err := realip.LoadConfig()
+	sugaredLogger, err := logger.New(loggerConfig)
+	if err != nil {
+		return nil, err
+	}
+	realipConfig, err := realip.LoadConfig(config)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +83,7 @@ func InitializeApp() (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	redisConfig, err := redis.LoadConfig()
+	redisConfig, err := redis.LoadConfig(config)
 	if err != nil {
 		return nil, err
 	}
@@ -80,12 +91,12 @@ func InitializeApp() (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	ratelimitConfig, err := ratelimit.LoadConfig()
+	ratelimitConfig, err := ratelimit.LoadConfig(config)
 	if err != nil {
 		return nil, err
 	}
 	limiter := ratelimit.New(client, ratelimitConfig)
-	tokenConfig, err := token.LoadConfig()
+	tokenConfig, err := token.LoadConfig(config)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +104,7 @@ func InitializeApp() (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	postgresConfig, err := postgres.LoadConfig()
+	postgresConfig, err := postgres.LoadConfig(config)
 	if err != nil {
 		return nil, err
 	}
@@ -101,22 +112,22 @@ func InitializeApp() (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	webhookConfig, err := webhook.LoadConfig()
+	webhookConfig, err := webhook.LoadConfig(config)
 	if err != nil {
 		return nil, err
 	}
 	adapter := postgres2.New(pool, webhookConfig)
-	authcookieConfig, err := authcookie.LoadConfig()
+	authcookieConfig, err := authcookie.LoadConfig(config)
 	if err != nil {
 		return nil, err
 	}
 	cookies := authcookie.New(authcookieConfig)
-	middlewareConfig, err := middleware.LoadConfig()
+	middlewareConfig, err := middleware.LoadConfig(config)
 	if err != nil {
 		return nil, err
 	}
 	middlewareMiddleware := middleware.New(resolver, limiter, signer, adapter, cookies, sugaredLogger, middlewareConfig)
-	corsConfig, err := cors.LoadConfig()
+	corsConfig, err := cors.LoadConfig(config)
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +140,7 @@ func InitializeApp() (*App, error) {
 	httPv1 := sys_health.NewHTTPv1(usecase, sugaredLogger)
 	auth_jwksUsecase := auth_jwks.New(signer)
 	auth_jwksHTTPv1 := auth_jwks.NewHTTPv1(auth_jwksUsecase, sugaredLogger)
-	auth_settingsConfig, err := auth_settings.LoadConfig()
+	auth_settingsConfig, err := auth_settings.LoadConfig(config)
 	if err != nil {
 		return nil, err
 	}
@@ -141,13 +152,13 @@ func InitializeApp() (*App, error) {
 		return nil, err
 	}
 	recorder := audit.New(adapter, sugaredLogger)
-	auth_tokenConfig, err := auth_token.LoadConfig()
+	auth_tokenConfig, err := auth_token.LoadConfig(config)
 	if err != nil {
 		return nil, err
 	}
 	auth_tokenUsecase := auth_token.New(adapter, issuer, hasher, limiter, recorder, auth_tokenConfig)
 	auth_tokenHTTPv1 := auth_token.NewHTTPv1(auth_tokenUsecase, cookies, sugaredLogger)
-	auth_registerConfig, err := auth_register.LoadConfig()
+	auth_registerConfig, err := auth_register.LoadConfig(config)
 	if err != nil {
 		return nil, err
 	}
@@ -157,7 +168,7 @@ func InitializeApp() (*App, error) {
 	auth_meHTTPv1 := auth_me.NewHTTPv1(auth_meUsecase, sugaredLogger)
 	session_listUsecase := session_list.New(adapter)
 	session_listHTTPv1 := session_list.NewHTTPv1(session_listUsecase, sugaredLogger)
-	auth_password_changeConfig, err := auth_password_change.LoadConfig()
+	auth_password_changeConfig, err := auth_password_change.LoadConfig(config)
 	if err != nil {
 		return nil, err
 	}
@@ -167,74 +178,88 @@ func InitializeApp() (*App, error) {
 	auth_revokeHTTPv1 := auth_revoke.NewHTTPv1(auth_revokeUsecase, cookies, sugaredLogger)
 	auth_logout_allUsecase := auth_logout_all.New(adapter, recorder)
 	auth_logout_allHTTPv1 := auth_logout_all.NewHTTPv1(auth_logout_allUsecase, cookies, sugaredLogger)
-	admin_user_createConfig, err := admin_user_create.LoadConfig()
+	guard := roleguard.New(adapter)
+	admin_user_createConfig, err := admin_user_create.LoadConfig(config)
 	if err != nil {
 		return nil, err
 	}
-	admin_user_createUsecase := admin_user_create.New(adapter, hasher, recorder, admin_user_createConfig)
+	admin_user_createUsecase := admin_user_create.New(adapter, guard, hasher, recorder, admin_user_createConfig)
 	admin_user_createHTTPv1 := admin_user_create.NewHTTPv1(admin_user_createUsecase, sugaredLogger)
 	admin_user_listUsecase := admin_user_list.New(adapter)
 	admin_user_listHTTPv1 := admin_user_list.NewHTTPv1(admin_user_listUsecase, sugaredLogger)
 	admin_user_getUsecase := admin_user_get.New(adapter)
 	admin_user_getHTTPv1 := admin_user_get.NewHTTPv1(admin_user_getUsecase, sugaredLogger)
-	admin_user_updateUsecase := admin_user_update.New(adapter, recorder)
+	admin_user_updateUsecase := admin_user_update.New(adapter, guard, recorder)
 	admin_user_updateHTTPv1 := admin_user_update.NewHTTPv1(admin_user_updateUsecase, sugaredLogger)
-	admin_user_deleteUsecase := admin_user_delete.New(adapter, recorder)
+	admin_user_deleteUsecase := admin_user_delete.New(adapter, guard, recorder)
 	admin_user_deleteHTTPv1 := admin_user_delete.NewHTTPv1(admin_user_deleteUsecase, sugaredLogger)
-	admin_user_set_passwordConfig, err := admin_user_set_password.LoadConfig()
+	admin_user_set_passwordConfig, err := admin_user_set_password.LoadConfig(config)
 	if err != nil {
 		return nil, err
 	}
-	admin_user_set_passwordUsecase := admin_user_set_password.New(adapter, hasher, recorder, admin_user_set_passwordConfig)
+	admin_user_set_passwordUsecase := admin_user_set_password.New(adapter, guard, hasher, recorder, admin_user_set_passwordConfig)
 	admin_user_set_passwordHTTPv1 := admin_user_set_password.NewHTTPv1(admin_user_set_passwordUsecase, sugaredLogger)
 	admin_user_sessions_listUsecase := admin_user_sessions_list.New(adapter)
 	admin_user_sessions_listHTTPv1 := admin_user_sessions_list.NewHTTPv1(admin_user_sessions_listUsecase, sugaredLogger)
-	admin_user_sessions_revokeUsecase := admin_user_sessions_revoke.New(adapter, recorder)
+	admin_user_sessions_revokeUsecase := admin_user_sessions_revoke.New(adapter, guard, recorder)
 	admin_user_sessions_revokeHTTPv1 := admin_user_sessions_revoke.NewHTTPv1(admin_user_sessions_revokeUsecase, sugaredLogger)
 	admin_audit_listUsecase := admin_audit_list.New(adapter)
 	admin_audit_listHTTPv1 := admin_audit_list.NewHTTPv1(admin_audit_listUsecase, sugaredLogger)
-	handlers := admin_v1.NewHandlers(admin_user_createHTTPv1, admin_user_listHTTPv1, admin_user_getHTTPv1, admin_user_updateHTTPv1, admin_user_deleteHTTPv1, admin_user_set_passwordHTTPv1, admin_user_sessions_listHTTPv1, admin_user_sessions_revokeHTTPv1, admin_audit_listHTTPv1)
+	admin_role_listUsecase := admin_role_list.New(adapter)
+	admin_role_listHTTPv1 := admin_role_list.NewHTTPv1(admin_role_listUsecase, sugaredLogger)
+	admin_role_createUsecase := admin_role_create.New(adapter, guard, recorder)
+	admin_role_createHTTPv1 := admin_role_create.NewHTTPv1(admin_role_createUsecase, sugaredLogger)
+	admin_role_updateUsecase := admin_role_update.New(adapter, guard, recorder)
+	admin_role_updateHTTPv1 := admin_role_update.NewHTTPv1(admin_role_updateUsecase, sugaredLogger)
+	admin_role_deleteUsecase := admin_role_delete.New(adapter, guard, recorder)
+	admin_role_deleteHTTPv1 := admin_role_delete.NewHTTPv1(admin_role_deleteUsecase, sugaredLogger)
+	handlers := admin_v1.NewHandlers(admin_user_createHTTPv1, admin_user_listHTTPv1, admin_user_getHTTPv1, admin_user_updateHTTPv1, admin_user_deleteHTTPv1, admin_user_set_passwordHTTPv1, admin_user_sessions_listHTTPv1, admin_user_sessions_revokeHTTPv1, admin_audit_listHTTPv1, admin_role_listHTTPv1, admin_role_createHTTPv1, admin_role_updateHTTPv1, admin_role_deleteHTTPv1)
 	engine := http_v1.New(middlewareMiddleware, corsMiddleware, limits, httPv1, auth_jwksHTTPv1, auth_settingsHTTPv1, auth_tokenHTTPv1, auth_registerHTTPv1, auth_meHTTPv1, session_listHTTPv1, auth_password_changeHTTPv1, auth_revokeHTTPv1, auth_logout_allHTTPv1, handlers)
 	router := admin_v1.NewRouter(middlewareMiddleware, middlewareConfig, handlers)
 	definition := schema.Definition()
-	dbschemaConfig, err := dbschema.LoadConfig()
+	dbschemaConfig, err := dbschema.LoadConfig(config)
 	if err != nil {
 		return nil, err
 	}
 	applier := dbschema.New(pool, definition, dbschemaConfig)
-	seed_super_adminConfig, err := seed_super_admin.LoadConfig()
+	seed_rolesConfig, err := seed_roles.LoadConfig(config)
+	if err != nil {
+		return nil, err
+	}
+	seed_rolesUsecase := seed_roles.New(adapter, recorder, seed_rolesConfig, sugaredLogger)
+	seed_super_adminConfig, err := seed_super_admin.LoadConfig(config)
 	if err != nil {
 		return nil, err
 	}
 	seed_super_adminUsecase := seed_super_admin.New(adapter, hasher, recorder, seed_super_adminConfig)
-	bootstrapBootstrap := bootstrap.New(applier, seed_super_adminUsecase, sugaredLogger)
-	audit_cleanerConfig, err := audit_cleaner.LoadConfig()
+	bootstrapBootstrap := bootstrap.New(applier, seed_rolesUsecase, seed_super_adminUsecase, sugaredLogger)
+	audit_cleanerConfig, err := audit_cleaner.LoadConfig(config)
 	if err != nil {
 		return nil, err
 	}
 	audit_cleanerUsecase := audit_cleaner.New(adapter, audit_cleanerConfig)
 	cronJob := audit_cleaner.NewCronJob(audit_cleanerUsecase, sugaredLogger, audit_cleanerConfig)
 	session_cleanerUsecase := session_cleaner.New(adapter)
-	session_cleanerConfig, err := session_cleaner.LoadConfig()
+	session_cleanerConfig, err := session_cleaner.LoadConfig(config)
 	if err != nil {
 		return nil, err
 	}
 	session_cleanerCronJob := session_cleaner.NewCronJob(session_cleanerUsecase, sugaredLogger, session_cleanerConfig)
 	sender := webhook.New(webhookConfig)
-	webhook_dispatcherConfig, err := webhook_dispatcher.LoadConfig()
+	webhook_dispatcherConfig, err := webhook_dispatcher.LoadConfig(config)
 	if err != nil {
 		return nil, err
 	}
 	webhook_dispatcherUsecase := webhook_dispatcher.New(adapter, sender, webhook_dispatcherConfig)
 	webhook_dispatcherCronJob := webhook_dispatcher.NewCronJob(webhook_dispatcherUsecase, sender, sugaredLogger, webhook_dispatcherConfig)
-	outbox_cleanerConfig, err := outbox_cleaner.LoadConfig()
+	outbox_cleanerConfig, err := outbox_cleaner.LoadConfig(config)
 	if err != nil {
 		return nil, err
 	}
 	outbox_cleanerUsecase := outbox_cleaner.New(adapter, outbox_cleanerConfig)
 	outbox_cleanerCronJob := outbox_cleaner.NewCronJob(outbox_cleanerUsecase, sugaredLogger, outbox_cleanerConfig)
 	cronCron := cron.New(cronJob, session_cleanerCronJob, webhook_dispatcherCronJob, outbox_cleanerCronJob, sugaredLogger)
-	mainConfig, err := LoadConfig()
+	mainConfig, err := LoadConfig(config)
 	if err != nil {
 		return nil, err
 	}

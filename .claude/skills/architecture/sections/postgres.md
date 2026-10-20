@@ -22,12 +22,12 @@ The annotation sets the return shape: `:one` a single row, `:many` a slice,
 
 ## Order of operations
 
-sqlc validates queries against the **migrations**, not a live database, so a
-query for a table with no migration cannot compile.
+sqlc validates queries against `schema/schema.sql`, not a live database, so
+a query for a table with no schema cannot compile.
 
 ```
-1. write the migration      migrations/NNNNNN_name.up.sql (+ .down.sql)
-2. apply it                 make migrate-up
+1. write the schema         schema/schema.sql (idempotent statements)
+2. write the queries        internal/adapter/postgres/queries/<entity>.sql
 3. regenerate               make generate     (sqlc, then wire)
 ```
 
@@ -35,9 +35,19 @@ query for a table with no migration cannot compile.
 `generated/`, so wire cannot compile the package until sqlc has produced it.
 Running wire first fails with a confusing missing-package error.
 
-Migration files are also compiled into the binary by `migrations/embed.go` and
-applied at startup by `pkg/migrator`, so a container against an empty database
-creates its own schema. Both paths write the same `schema_migrations` table.
+There is no migration tool and no version table. The schema is compiled into
+the binary (`schema/embed.go`) and applied at every startup, so a container
+against an empty database creates its own tables. Every statement must be
+idempotent: `CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`. A bare
+`CREATE TABLE IF NOT EXISTS` is skipped whole once the table exists, so evolving
+an existing table means restating the change as an idempotent repair at the
+bottom of the file (`ALTER TABLE … ADD COLUMN IF NOT EXISTS`, constraint drops
+and re-adds). In development it is usually simpler to drop the volume — the
+seed rebuilds the floor from scratch.
+
+Startup order is schema → seed roles (`ga_roles`, `ga_role_permissions`) → seed
+super admin. It matters: `ga_users.role` is NOT NULL and foreign-keyed, so the
+`user` role row must exist before the first account references it.
 
 ## The adapter maps errors
 
@@ -86,6 +96,6 @@ one growing adapter file.
 
 ## Connection
 
-`pkg/postgres` opens a `pgxpool` and pings it at startup, so a bad `POSTGRES_URL`
+`pkg/postgres` opens a `pgxpool` and pings it at startup, so a bad `db.url`
 fails immediately rather than on the first request. The pool is closed during
 graceful shutdown, after the HTTP server stops accepting requests.

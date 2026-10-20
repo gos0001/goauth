@@ -32,6 +32,18 @@ type GaOutbox struct {
 	Seq           pgtype.Int8        `json:"seq"`
 }
 
+type GaRole struct {
+	Name      string             `json:"name"`
+	Rank      int32              `json:"rank"`
+	IsSystem  bool               `json:"is_system"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type GaRolePermission struct {
+	Role       string `json:"role"`
+	Permission string `json:"permission"`
+}
+
 type GaSession struct {
 	ID          uuid.UUID          `json:"id"`
 	UserID      uuid.UUID          `json:"user_id"`
@@ -49,7 +61,7 @@ type GaUser struct {
 	Username     pgtype.Text        `json:"username"`
 	Email        pgtype.Text        `json:"email"`
 	PasswordHash string             `json:"password_hash"`
-	IsAdmin      bool               `json:"is_admin"`
+	Role         string             `json:"role"`
 	Status       string             `json:"status"`
 	LastLoginAt  pgtype.Timestamptz `json:"last_login_at"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`

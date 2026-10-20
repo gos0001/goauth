@@ -2,12 +2,12 @@ package logger
 
 import (
 	"github.com/google/wire"
-	"github.com/kelseyhightower/envconfig"
+	"github.com/gos0001/goauth/pkg/appconfig"
 )
 
-func LoadConfig() (Config, error) {
-	var cfg Config
-	return cfg, envconfig.Process("", &cfg)
+func LoadConfig(root appconfig.Config) (Config, error) {
+	cfg := Config{ENV: root.Env}
+	return cfg, nil
 }
 
 var Set = wire.NewSet(LoadConfig, New)

@@ -127,7 +127,7 @@ func (m *Middleware) Auth() gin.HandlerFunc {
 			return
 		}
 
-		httpserver.SetIdentity(c, claims.Subject, claims.SessionID, claims.Admin, time.Unix(claims.AuthTime, 0))
+		httpserver.SetIdentity(c, claims.Subject, claims.SessionID, claims.Role, time.Unix(claims.AuthTime, 0))
 		httpserver.SetActor(c, domain.ActorUser(claims.Subject))
 		c.Next()
 	}
@@ -135,7 +135,7 @@ func (m *Middleware) Auth() gin.HandlerFunc {
 
 // AuthSilent verifies the bearer token for the admin surface, answering 404
 // rather than 401 so that an unauthorised caller cannot confirm /admin exists
-// and merely needs credentials. Paired with AdminJWT, a missing token, a bad
+// and merely needs credentials. Paired with the permission guard, a missing token, a bad
 // token and a valid token without rights are all indistinguishable from a route
 // that was never registered.
 //
@@ -146,7 +146,8 @@ func (m *Middleware) Auth() gin.HandlerFunc {
 // recover — its refresh flow keys on 401. Saying "expired" discloses nothing:
 // the token is one this service issued and signed, so its holder already had a
 // session and learns nothing new about themselves. What stays hidden is who is
-// an admin, which is AdminJWT's job — a valid non-admin token still gets 404.
+// holds which permission, which is the scope guard's job — a valid token
+// without the permission still gets 404.
 func (m *Middleware) AuthSilent() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		raw, ok := m.credential(c)
@@ -170,23 +171,31 @@ func (m *Middleware) AuthSilent() gin.HandlerFunc {
 			return
 		}
 
-		httpserver.SetIdentity(c, claims.Subject, claims.SessionID, claims.Admin, time.Unix(claims.AuthTime, 0))
+		httpserver.SetIdentity(c, claims.Subject, claims.SessionID, claims.Role, time.Unix(claims.AuthTime, 0))
 		httpserver.SetActor(c, domain.ActorUser(claims.Subject))
 		c.Next()
 	}
 }
 
-// AdminJWT authorises the panel's own admin calls.
+// RequirePermission authorises the panel's admin calls by scope. Domain
+// permissions are strings at this boundary so the controllers that wire routes
+// never import the domain package — routing stays literals all the way down.
+func (m *Middleware) RequireScope(scope string) gin.HandlerFunc {
+	return m.RequirePermission(domain.Permission(scope))
+}
+
+// RequirePermission authorises the panel's admin calls by scope.
 //
-// It re-reads is_admin and status from the database rather than trusting the
-// token's adm claim. An access token cannot be revoked before it expires, so a
-// claim-based check would leave a demoted or blocked admin in full power for the
-// remainder of its lifetime. goauth owns this database, so the read is local and
-// costs nothing worth saving.
+// It re-reads the actor's role — rank, permissions, and that the account is
+// still active — from the database rather than trusting the token's role
+// claim. An access token cannot be revoked before it expires, so a claim-based
+// check would leave a demoted or blocked administrator in full power for the
+// remainder of its lifetime. goauth owns this database, so the read is local
+// and costs nothing worth saving.
 //
 // Failures answer 404 rather than 403: an unauthorised caller learns nothing
 // about whether this surface exists.
-func (m *Middleware) AdminJWT() gin.HandlerFunc {
+func (m *Middleware) RequirePermission(p domain.Permission) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID := httpserver.UserID(c)
 		if userID == "" {
@@ -194,16 +203,16 @@ func (m *Middleware) AdminJWT() gin.HandlerFunc {
 			return
 		}
 
-		user, err := m.postgres.GetUserByID(c.Request.Context(), userID)
+		role, err := m.postgres.ActorRole(c.Request.Context(), userID)
 		if err != nil {
 			if !errors.Is(err, domain.ErrUserNotFound) {
-				m.logger.Errorw("admin guard lookup failed", "user_id", userID, "error", err)
+				m.logger.Errorw("permission guard lookup failed", "user_id", userID, "error", err)
 			}
 			c.AbortWithStatus(http.StatusNotFound)
 			return
 		}
 
-		if !user.IsAdmin || !user.Active() {
+		if !role.Has(p) {
 			c.AbortWithStatus(http.StatusNotFound)
 			return
 		}

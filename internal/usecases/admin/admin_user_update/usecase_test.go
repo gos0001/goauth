@@ -25,8 +25,24 @@ func (f *fakePostgres) GetUserByID(_ context.Context, id string) (domain.User, e
 	return u, nil
 }
 
-func (f *fakePostgres) CountActiveAdmins(context.Context) (int, error) {
+func (f *fakePostgres) CountActiveSuperAdmins(context.Context) (int, error) {
 	return f.activeAdmins, nil
+}
+
+func (f *fakePostgres) GetRole(_ context.Context, name string) (domain.Role, error) {
+	if name == "" {
+		name = domain.RoleUser
+	}
+	rank := domain.RankUser
+	switch name {
+	case domain.RoleManager:
+		rank = domain.RankManager
+	case domain.RoleAdmin:
+		rank = domain.RankAdmin
+	case domain.RoleSuperAdmin:
+		rank = domain.RankSuperAdmin
+	}
+	return domain.Role{Name: name, Rank: rank}, nil
 }
 
 func (f *fakePostgres) UpdateUser(_ context.Context, p postgresadapter.UpdateUserParams) (domain.User, error) {
@@ -51,8 +67,8 @@ func (f *fakePostgres) apply(p postgresadapter.UpdateUserParams) domain.User {
 	if p.Status != nil {
 		u.Status = *p.Status
 	}
-	if p.IsAdmin != nil {
-		u.IsAdmin = *p.IsAdmin
+	if p.Role != nil {
+		u.Role = *p.Role
 	}
 	f.users[p.ID] = u
 	return u
@@ -64,34 +80,56 @@ func (f *fakeAuditor) Record(_ context.Context, e domain.AuditEntry) {
 	f.actions = append(f.actions, e.Action)
 }
 
+// fakeGuard answers as one fixed role for every actor, machine included: the
+// rank rules themselves are exercised through the roles the fake postgres
+// hands out, not through the actor's identity.
+type fakeGuard struct{ role domain.Role }
+
+func (f fakeGuard) Actor(_ context.Context, _ string) (domain.Role, error) {
+	return f.role, nil
+}
+
+func superGuard() fakeGuard {
+	return fakeGuard{role: domain.Role{Name: domain.RoleSuperAdmin, Rank: domain.RankSuperAdmin}}
+}
+
+func adminGuard() fakeGuard {
+	return fakeGuard{role: domain.Role{Name: domain.RoleAdmin, Rank: domain.RankAdmin}}
+}
+
 func harness(users ...domain.User) (*Usecase, *fakePostgres, *fakeAuditor) {
+	return harnessWith(superGuard(), users...)
+}
+
+func harnessWith(g fakeGuard, users ...domain.User) (*Usecase, *fakePostgres, *fakeAuditor) {
 	pg := &fakePostgres{users: map[string]domain.User{}}
 	for _, u := range users {
 		pg.users[u.ID] = u
-		if u.IsAdmin && u.Active() {
+		if u.IsSuperAdmin() && u.Active() {
 			pg.activeAdmins++
 		}
 	}
 	auditor := &fakeAuditor{}
-	return &Usecase{postgres: pg, auditor: auditor}, pg, auditor
+	return &Usecase{postgres: pg, guard: g, auditor: auditor}, pg, auditor
 }
 
 func admin(id string) domain.User {
-	return domain.User{ID: id, Username: id, IsAdmin: true, Status: domain.StatusActive}
+	return domain.User{ID: id, Username: id, Role: domain.RoleSuperAdmin, Status: domain.StatusActive}
 }
 
 func member(id string) domain.User {
-	return domain.User{ID: id, Username: id, Status: domain.StatusActive}
+	return domain.User{ID: id, Username: id, Role: domain.RoleUser, Status: domain.StatusActive}
 }
 
 func ptr[T any](v T) *T { return &v }
 
-// Losing your own admin rights leaves nobody able to give them back to you.
-func TestSelfDemotionRefused(t *testing.T) {
+// Changing your own role leaves nobody able to give the old one back — or
+// hands you a better one nobody authorised.
+func TestSelfRoleChangeRefused(t *testing.T) {
 	uc, _, _ := harness(admin("admin-1"), admin("admin-2"))
 
 	_, err := uc.Execute(context.Background(), Input{
-		ID: "admin-1", ActorUserID: "admin-1", IsAdmin: ptr(false),
+		ID: "admin-1", ActorUserID: "admin-1", Role: ptr(domain.RoleUser),
 	})
 	if !errors.Is(err, domain.ErrSelfDemote) {
 		t.Fatalf("err = %v, want ErrSelfDemote", err)
@@ -104,7 +142,7 @@ func TestLastAdminCannotBeDemoted(t *testing.T) {
 	uc, _, _ := harness(admin("admin-1"))
 
 	_, err := uc.Execute(context.Background(), Input{
-		ID: "admin-1", ActorUserID: "", IsAdmin: ptr(false),
+		ID: "admin-1", ActorUserID: "", Role: ptr(domain.RoleUser),
 	})
 	if !errors.Is(err, domain.ErrLastAdmin) {
 		t.Fatalf("err = %v, want ErrLastAdmin", err)
@@ -126,16 +164,16 @@ func TestAdminCanBeDemotedWhenAnotherExists(t *testing.T) {
 	uc, _, auditor := harness(admin("admin-1"), admin("admin-2"))
 
 	out, err := uc.Execute(context.Background(), Input{
-		ID: "admin-2", ActorUserID: "admin-1", IsAdmin: ptr(false),
+		ID: "admin-2", ActorUserID: "admin-1", Role: ptr(domain.RoleUser),
 	})
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	if out.IsAdmin {
-		t.Fatal("is_admin was not cleared")
+	if out.Role != domain.RoleUser {
+		t.Fatal("role was not cleared")
 	}
-	if !contains(auditor.actions, domain.ActionAdminRevoked) {
-		t.Fatalf("audit actions = %v, want an admin_revoked entry", auditor.actions)
+	if !contains(auditor.actions, domain.ActionRoleAssigned) {
+		t.Fatalf("audit actions = %v, want a role_assigned entry", auditor.actions)
 	}
 }
 

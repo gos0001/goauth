@@ -18,7 +18,7 @@ import (
 )
 
 type Postgres interface {
-	CountActiveAdmins(ctx context.Context) (int, error)
+	CountActiveSuperAdmins(ctx context.Context) (int, error)
 	CreateUser(ctx context.Context, p postgresadapter.CreateUserParams) (domain.User, error)
 }
 
@@ -61,11 +61,11 @@ func (uc *Usecase) Execute(ctx context.Context, _ Input) (Output, error) {
 	// into is worse than a service that refuses to start and says why.
 	if err := domain.ValidatePassword(uc.cfg.Password, uc.cfg.MinPasswordLength); err != nil {
 		return Output{}, fmt.Errorf(
-			"seed_super_admin: SUPER_ADMIN_PASSWORD is required alongside SUPER_ADMIN_USERNAME "+
+			"seed_super_admin: seed.password is required alongside seed.username "+
 				"and must be at least %d characters: %w", uc.cfg.MinPasswordLength, err)
 	}
 
-	admins, err := uc.postgres.CountActiveAdmins(ctx)
+	admins, err := uc.postgres.CountActiveSuperAdmins(ctx)
 	if err != nil {
 		return Output{}, fmt.Errorf("seed_super_admin: count admins: %w", err)
 	}
@@ -95,7 +95,7 @@ func (uc *Usecase) Execute(ctx context.Context, _ Input) (Output, error) {
 		Username:     username,
 		Email:        email,
 		PasswordHash: hash,
-		IsAdmin:      true,
+		Role:         domain.RoleSuperAdmin,
 		Status:       domain.StatusActive,
 	})
 	if err != nil {
@@ -111,9 +111,9 @@ func (uc *Usecase) Execute(ctx context.Context, _ Input) (Output, error) {
 	}
 
 	uc.auditor.Record(ctx, audit.Event(domain.ActorSystem, domain.ActionUserCreated, user.ID, "",
-		map[string]any{"bootstrap": true, "is_admin": true}))
-	uc.auditor.Record(ctx, audit.Event(domain.ActorSystem, domain.ActionAdminGranted, user.ID, "",
-		map[string]any{"bootstrap": true}))
+		map[string]any{"bootstrap": true, "role": domain.RoleSuperAdmin}))
+	uc.auditor.Record(ctx, audit.Event(domain.ActorSystem, domain.ActionRoleAssigned, user.ID, "",
+		map[string]any{"bootstrap": true, "role": domain.RoleSuperAdmin}))
 
 	return Output{
 		Created:    true,

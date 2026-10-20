@@ -73,7 +73,7 @@ func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) {
 		Username:     username,
 		Email:        email,
 		PasswordHash: hash,
-		IsAdmin:      false,
+		Role:         domain.RoleUser,
 		Status:       domain.StatusActive,
 	})
 	if err != nil {
@@ -100,7 +100,7 @@ func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) {
 			ID:       user.ID,
 			Username: user.Username,
 			Email:    user.Email,
-			IsAdmin:  user.IsAdmin,
+			Role:     user.Role,
 		},
 	}, nil
 }

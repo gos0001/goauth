@@ -1,12 +1,11 @@
 bin/
 tmp/
 
-# Local environment files hold real signing keys and admin tokens. Only
-# .env.example — which has the same variables with empty secrets — is committed.
-.env
-.env.*
-!.env.example
-*.local.env
+# The local config holds real signing keys and admin tokens. Only
+# config.example.json — the same file with empty secrets — is committed.
+config.json
+config.*.json
+!config.example.json
 
 # .claude/ is intentionally NOT ignored — the architecture contract travels with
 # the repository so every agent or contributor works from the same rules.

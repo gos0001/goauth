@@ -8,18 +8,20 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/gos0001/goauth/internal/usecases/seed_roles"
 	"github.com/gos0001/goauth/internal/usecases/seed_super_admin"
 	"github.com/gos0001/goauth/pkg/dbschema"
 )
 
 type Bootstrap struct {
 	schema *dbschema.Applier
+	roles  *seed_roles.Usecase
 	seed   *seed_super_admin.Usecase
 	logger *zap.SugaredLogger
 }
 
-func New(schema *dbschema.Applier, seed *seed_super_admin.Usecase, logger *zap.SugaredLogger) *Bootstrap {
-	return &Bootstrap{schema: schema, seed: seed, logger: logger}
+func New(schema *dbschema.Applier, roles *seed_roles.Usecase, seed *seed_super_admin.Usecase, logger *zap.SugaredLogger) *Bootstrap {
+	return &Bootstrap{schema: schema, roles: roles, seed: seed, logger: logger}
 }
 
 // Run executes startup tasks in order. An error here aborts the boot: a service
@@ -27,8 +29,13 @@ func New(schema *dbschema.Applier, seed *seed_super_admin.Usecase, logger *zap.S
 // misconfigured — starting anyway would serve requests against a database it
 // does not understand.
 func (b *Bootstrap) Run(ctx context.Context) error {
-	// Schema first: the seed inserts into ga_users and needs the table.
+	// Schema first: the seeds insert into ga_roles and ga_users.
 	if err := b.ensureSchema(ctx); err != nil {
+		return err
+	}
+	// Roles before users: ga_users.role foreign-keys into ga_roles, so the
+	// 'user' row has to exist before the first account references it.
+	if err := b.seedRoles(ctx); err != nil {
 		return err
 	}
 	return b.seedSuperAdmin(ctx)
@@ -46,6 +53,17 @@ func (b *Bootstrap) ensureSchema(ctx context.Context) error {
 		b.logger.Info("schema ready")
 	}
 
+	return nil
+}
+
+func (b *Bootstrap) seedRoles(ctx context.Context) error {
+	out, err := b.roles.Execute(ctx, seed_roles.Input{})
+	if err != nil {
+		return fmt.Errorf("bootstrap: seed roles: %w", err)
+	}
+	if out.Created > 0 {
+		b.logger.Infow("role floor seeded", "created", out.Created)
+	}
 	return nil
 }
 

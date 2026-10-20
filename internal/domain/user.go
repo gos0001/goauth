@@ -20,10 +20,10 @@ const (
 // only inside a consuming product — subscriptions, product roles, entitlements —
 // belongs to that product's own database, keyed by ID.
 //
-// IsAdmin governs goauth's own /admin endpoints and nothing else. It is a bool
-// rather than a role list on purpose: the moment it becomes a set of
-// product-scoped roles, this service needs to know which product a role belongs
-// to, and that is the realm concept it exists to avoid.
+// Role is goauth's own administration tier (see role.go): it governs who may
+// manage whom on this service's admin surface and nothing else. One role per
+// user, deliberately — a set of roles would need a merge rule for ranks, and
+// "the highest of them" is an escalation waiting to happen.
 type User struct {
 	ID string
 
@@ -33,13 +33,18 @@ type User struct {
 	Email    string
 
 	PasswordHash string
-	IsAdmin      bool
+	Role         string
 	Status       UserStatus
 
 	LastLoginAt *time.Time
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }
+
+// IsSuperAdmin reports whether the account sits at the top of the
+// administration hierarchy: the only rank permitted to manage admins and to
+// grant anything. Used by the last-superadmin guard among others.
+func (u User) IsSuperAdmin() bool { return u.Role == RoleSuperAdmin }
 
 // Active reports whether the account may authenticate at all.
 func (u User) Active() bool { return u.Status == StatusActive }

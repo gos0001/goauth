@@ -19,9 +19,10 @@ func NewHTTPv1(uc *Usecase, logger *zap.SugaredLogger) *HTTPv1 {
 
 func (h *HTTPv1) Handle(c *gin.Context) {
 	in := Input{
-		UserID: c.Param("id"),
-		Actor:  httpserver.Actor(c),
-		IP:     httpserver.ClientIP(c),
+		UserID:      c.Param("id"),
+		ActorUserID: httpserver.UserID(c),
+		Actor:       httpserver.Actor(c),
+		IP:          httpserver.ClientIP(c),
 	}
 
 	if err := in.Validate(); err != nil {

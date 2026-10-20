@@ -27,8 +27,9 @@ var Set = wire.NewSet(LoadConfig, New)
 aggregates every `Set` into one `InitializeApp`:
 
 ```go
-func InitializeApp() (*App, error) {
+func InitializeApp(configPath string) (*App, error) {
     wire.Build(
+        appconfig.Set,
         LoadConfig,
         logger.Set,
         http_v1.Set,
@@ -38,6 +39,10 @@ func InitializeApp() (*App, error) {
     return nil, nil
 }
 ```
+
+`configPath` comes from the `-config` flag in `main.go` and feeds
+`appconfig.Load` — the one provider of `appconfig.Config` every `LoadConfig`
+in the graph drinks from.
 
 `cmd/wire_gen.go` is the real implementation. ⛔ **Never edit it.** Change a
 constructor, then run `wire ./cmd/` (or `make generate`). Commit both files.

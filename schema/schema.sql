@@ -1,4 +1,4 @@
--- goauth's entire schema: identity, refresh-token sessions, audit trail.
+-- goauth's entire schema: identity, roles, refresh-token sessions, audit trail.
 --
 -- Applied at every startup, so every statement is idempotent. There is no
 -- migration tool and no version table — the service creates what it needs and
@@ -18,12 +18,43 @@
 -- exact. That keeps normalisation explicit and in one place, and avoids
 -- teaching pgx a dynamically-assigned extension type OID.
 
+-- Roles are goauth's own administration hierarchy: which users may manage
+-- which. They are not product roles — entitlements of a consuming application
+-- belong in that application's database, keyed by user_id.
+--
+-- Rank is a strict ordering, and the whole security model hangs on it: an
+-- actor may act on a target only when rank(actor) > rank(target). Ranks are
+-- UNIQUE so the order can never tie — "equal rank" must not exist as a
+-- concept the database cannot express. The permission names themselves are
+-- validated in Go against the set of scopes goauth actually checks; the
+-- database stores the mapping, the code defines the vocabulary.
+CREATE TABLE IF NOT EXISTS ga_roles (
+    name       text PRIMARY KEY,
+    rank       integer     NOT NULL UNIQUE CHECK (rank >= 0),
+    is_system  boolean     NOT NULL DEFAULT false,
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS ga_role_permissions (
+    role       text NOT NULL REFERENCES ga_roles (name) ON DELETE CASCADE,
+    permission text NOT NULL,
+    PRIMARY KEY (role, permission)
+);
+
 CREATE TABLE IF NOT EXISTS ga_users (
     id                   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     username             text UNIQUE,
     email                text UNIQUE,
     password_hash        text        NOT NULL,
-    is_admin             boolean     NOT NULL DEFAULT false,
+
+    -- Exactly one role per user. Plain accounts are 'user' (rank 0); the
+    -- bootstrap seeds that row alongside the administrative roles, because
+    -- this column is NOT NULL and foreign-keyed — a user without a role row
+    -- cannot exist, and neither can a role that outlives its users' references
+    -- (DELETE is restricted by the NOT NULL here, so a role still in use
+    -- refuses to go until its users are reassigned).
+    role                 text        NOT NULL DEFAULT 'user' REFERENCES ga_roles (name),
+
     status               text        NOT NULL DEFAULT 'active',
     last_login_at        timestamptz,
     created_at           timestamptz NOT NULL DEFAULT now(),
@@ -100,7 +131,7 @@ CREATE INDEX IF NOT EXISTS ga_outbox_created_idx ON ga_outbox (created_at);
 --
 -- Soft delete clears both identifiers, which the original constraint forbade —
 -- DELETE /admin/users/{id} failed with a check violation on every call.
--- The bootstrap admin's credentials come from the environment, so a forced
+-- The bootstrap admin's credentials come from the config file, so a forced
 -- password change was ceremony over a value the operator already knows.
 ALTER TABLE ga_users DROP COLUMN IF EXISTS must_change_password;
 

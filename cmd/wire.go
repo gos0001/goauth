@@ -5,15 +5,20 @@ package main
 import (
 	"github.com/google/wire"
 
-	postgresadapter "github.com/gos0001/goauth/internal/adapter/postgres"
+	"github.com/gos0001/goauth/internal/adapter/postgres"
 	"github.com/gos0001/goauth/internal/controller/admin_v1"
 	"github.com/gos0001/goauth/internal/controller/http_v1"
 	"github.com/gos0001/goauth/internal/middleware"
 	"github.com/gos0001/goauth/internal/orchestrators/bootstrap"
 	"github.com/gos0001/goauth/internal/orchestrators/cron"
 	"github.com/gos0001/goauth/internal/service/audit"
+	"github.com/gos0001/goauth/internal/service/roleguard"
 	"github.com/gos0001/goauth/internal/service/tokens"
 	"github.com/gos0001/goauth/internal/usecases/admin/admin_audit_list"
+	"github.com/gos0001/goauth/internal/usecases/admin/admin_role_create"
+	"github.com/gos0001/goauth/internal/usecases/admin/admin_role_delete"
+	"github.com/gos0001/goauth/internal/usecases/admin/admin_role_list"
+	"github.com/gos0001/goauth/internal/usecases/admin/admin_role_update"
 	"github.com/gos0001/goauth/internal/usecases/admin/admin_user_create"
 	"github.com/gos0001/goauth/internal/usecases/admin/admin_user_delete"
 	"github.com/gos0001/goauth/internal/usecases/admin/admin_user_get"
@@ -33,10 +38,12 @@ import (
 	"github.com/gos0001/goauth/internal/usecases/auth/auth_token"
 	"github.com/gos0001/goauth/internal/usecases/auth/session_list"
 	"github.com/gos0001/goauth/internal/usecases/outbox_cleaner"
+	"github.com/gos0001/goauth/internal/usecases/seed_roles"
 	"github.com/gos0001/goauth/internal/usecases/seed_super_admin"
 	"github.com/gos0001/goauth/internal/usecases/session_cleaner"
 	"github.com/gos0001/goauth/internal/usecases/sys/sys_health"
 	"github.com/gos0001/goauth/internal/usecases/webhook_dispatcher"
+	"github.com/gos0001/goauth/pkg/appconfig"
 	"github.com/gos0001/goauth/pkg/authcookie"
 	"github.com/gos0001/goauth/pkg/cors"
 	"github.com/gos0001/goauth/pkg/dbschema"
@@ -52,8 +59,9 @@ import (
 	// codegen:imports
 )
 
-func InitializeApp() (*App, error) {
+func InitializeApp(configPath string) (*App, error) {
 	wire.Build(
+		appconfig.Set,
 		LoadConfig,
 		logger.Set,
 		pkgpostgres.Set,
@@ -71,9 +79,10 @@ func InitializeApp() (*App, error) {
 		webhook.Set,
 
 		// adapters and shared services
-		postgresadapter.Set,
+		postgres.Set,
 		tokens.Set,
 		audit.Set,
+		roleguard.Set,
 
 		// use cases
 		sys_health.Set,
@@ -86,6 +95,7 @@ func InitializeApp() (*App, error) {
 		auth_password_change.Set,
 		auth_revoke.Set,
 		auth_logout_all.Set,
+		seed_roles.Set,
 		seed_super_admin.Set,
 		audit_cleaner.Set,
 		session_cleaner.Set,
@@ -101,6 +111,11 @@ func InitializeApp() (*App, error) {
 		admin_user_sessions_list.Set,
 		admin_user_sessions_revoke.Set,
 		admin_audit_list.Set,
+
+		admin_role_list.Set,
+		admin_role_create.Set,
+		admin_role_update.Set,
+		admin_role_delete.Set,
 
 		// transport
 		middleware.Set,

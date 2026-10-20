@@ -3,7 +3,7 @@
 Цель: `POST /auth/token` (и связанные эндпоинты) ставит `Set-Cookie`
 (HttpOnly, Secure, SameSite=Strict) **в дополнение** к JSON-ответу.
 JSON остаётся всегда — для non-browser клиентов (CLI, server-to-server, mobile).
-Канал opt-in через env, по умолчанию выключен.
+Канал opt-in через `authcookie.enabled` в config.json, по умолчанию выключен.
 
 Радиус: **containment ущерба от XSS** в браузерном SPA — refresh-токен
 перестаёт быть читаемым из JS. Это НЕ защита от самого XSS (CSP и
@@ -19,18 +19,18 @@ Upstream: правим сразу в main (репо и есть upstream), fork-
 
 - [x] Имена кук: `goauth_access`, `goauth_refresh` — фиксированные константы,
       без `__Host-` префикса (он требует незапрещаемого Secure, а
-      `AUTH_COOKIE_SECURE` выключаем для dev-сетапов).
-- [x] SameSite: `strict` по умолчанию, `AUTH_COOKIE_SAMESITE=lax` как opt-out.
-- [x] Secure: `AUTH_COOKIE_SECURE` default `true`.
+      `authcookie.secure` выключаем для dev-сетапов).
+- [x] SameSite: `strict` по умолчанию, `authcookie.samesite = "lax"` как opt-out.
+- [x] Secure: `authcookie.secure` default `true`.
 - [x] Domain: не ставится (host-only), env нет.
 - [x] Access-кука ставится вместе с refresh.
 - [x] Refresh grant по куке при пустом `refresh_token` в body.
 
 ## 1. Конфигурация
 
-- [x] `pkg/authcookie/config.go`: envconfig, `AUTH_COOKIE_ENABLED/_SECURE/_SAMESITE`,
-      samesite валидируется на старте
-- [x] `.env.example` — с комментариями
+- [x] `pkg/authcookie/config.go`: секция `authcookie` config.json
+      (`enabled`/`secure`/`samesite`), samesite валидируется на старте
+- [x] `config.example.json` — ключи задокументированы
 
 ## 2. Пакет `pkg/authcookie`
 
@@ -65,7 +65,7 @@ Upstream: правим сразу в main (репо и есть upstream), fork-
 
 ## 6. CORS
 
-- [x] `Config.AllowCredentials` (не env) + `NewWithCookies` в wire — флаг
+- [x] `Config.AllowCredentials` (не в конфиге) + `NewWithCookies` в wire — флаг
       склеивается из `authcookie.Enabled()`, разъехаться не может
 - [x] `Access-Control-Allow-Credentials: true` на простые ответы и preflight
 - [x] Fail-fast: `*` + credentials → ошибка на старте

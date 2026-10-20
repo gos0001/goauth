@@ -5,7 +5,7 @@ import (
 )
 
 type Config struct {
-	ENV string `envconfig:"APP_ENV" default:"development"`
+	ENV string `json:"-"`
 }
 
 func New(cfg Config) (*zap.SugaredLogger, error) {

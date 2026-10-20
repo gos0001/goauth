@@ -7,18 +7,32 @@ package auth_settings
 import (
 	"context"
 
-	"github.com/kelseyhightower/envconfig"
+	"github.com/gos0001/goauth/pkg/appconfig"
 )
 
 type Config struct {
-	RegistrationMode  string `envconfig:"AUTH_REGISTRATION_MODE" default:"closed"`
-	MinPasswordLength int    `envconfig:"AUTH_MIN_PASSWORD_LEN"  default:"12"`
-	Issuer            string `envconfig:"JWT_ISSUER"             default:"goauth"`
+	RegistrationMode  string `json:"registration_mode"`
+	MinPasswordLength int    `json:"min_password_len"`
+	Issuer            string `json:"-"`
 }
 
-func LoadConfig() (Config, error) {
-	var cfg Config
-	return cfg, envconfig.Process("", &cfg)
+func LoadConfig(root appconfig.Config) (Config, error) {
+	cfg := Config{RegistrationMode: "closed", MinPasswordLength: 12, Issuer: "goauth"}
+	if err := root.Section("auth", &cfg); err != nil {
+		return Config{}, err
+	}
+
+	// The issuer is the token section's, not a second knob: one issuer, one
+	// place, and this use case only echoes it back to clients.
+	var token struct {
+		Issuer string `json:"issuer"`
+	}
+	token.Issuer = cfg.Issuer
+	if err := root.Section("token", &token); err != nil {
+		return Config{}, err
+	}
+	cfg.Issuer = token.Issuer
+	return cfg, nil
 }
 
 type Usecase struct {

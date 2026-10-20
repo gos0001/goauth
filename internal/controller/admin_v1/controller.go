@@ -27,7 +27,7 @@ func NewRouter(mw *middleware.Middleware, cfg middleware.Config, h Handlers) *Ro
 	e := gin.New()
 	e.Use(gin.Recovery(), mw.RealIP())
 
-	RegisterRoutes(e, []gin.HandlerFunc{mw.AdminToken()}, mw.RequireRecentAuth(), h)
+	RegisterRoutes(e, mw.AdminToken(), nil, mw.RequireRecentAuth(), h)
 
 	return &Router{Engine: e}
 }

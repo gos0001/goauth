@@ -14,8 +14,9 @@ internal/usecases/users/user_get/
 ```
 
 `http_v1.go` is present only when an HTTP caller exists; a use case invoked from
-a startup orchestrator has no handler. Add `config.go` when the package reads its
-own environment variables. See `@sections/adding-a-usecase.md` for the steps.
+a startup orchestrator has no handler. Add `config.go` when the package reads
+its own section of `config.json`. See `@sections/adding-a-usecase.md` for the
+steps.
 
 ## Adapter interfaces belong to the use case
 

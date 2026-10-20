@@ -38,18 +38,12 @@ services:
     # http://app:8081 for containers on this network and nowhere else.
     ports:
       - "8080:8080"
-    env_file:
-      - .env.development
-    environment:
-      POSTGRES_URL: postgres://postgres:postgres@postgres:5432/goauth_dev?sslmode=disable
-      REDIS_URL: redis://redis:6379
-      APP_ADDR: ":8080"
-      # Inside a container 127.0.0.1 is the container's own loopback, so sibling
-      # services could never reach the admin listener. Bind it to all interfaces
-      # and keep it private by not publishing the port above.
-      ADMIN_ADDR: "0.0.0.0:8081"
-      # The schema is created on first start; no separate migrate step.
-      AUTO_MIGRATE: "true"
+    volumes:
+      - ./config.json:/config.json:ro
+    # Inside a container 127.0.0.1 is the container's own loopback, so sibling
+    # services could never reach the admin listener: config.json must set
+    # app.admin_addr to "0.0.0.0:8081" and the port simply stays unpublished.
+    command: ["-config", "/config.json"]
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-q", "-O-", "http://127.0.0.1:8080/healthz"]

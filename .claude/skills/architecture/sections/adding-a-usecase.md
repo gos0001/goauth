@@ -7,6 +7,8 @@ add one is to copy the nearest existing package and change it. Two good models:
   handler, a wire set.
 - `internal/usecases/auth/auth_token/` — the fullest: config, several adapter
   interfaces, branching logic, a hand-written `Validate`.
+- `internal/usecases/admin/admin_role_create/` — the admin shape: a
+  `roleguard.Guard`, an auditor, rank and permission checks.
 
 ## 1. Pick the directory and package name
 
@@ -25,7 +27,7 @@ never `get`.
 internal/usecases/users/user_get/
 ├── usecase.go   Usecase struct, adapter interfaces, New, Execute
 ├── dto.go       Input, Output, Validate            (may live in usecase.go if small)
-├── config.go    envconfig struct + LoadConfig      (only if it needs config)
+├── config.go    json struct + LoadConfig(root)      (only if it needs config)
 ├── http_v1.go   the JSON handler                   (only if an HTTP caller exists)
 └── wire.go      var Set = wire.NewSet(...)
 ```
@@ -56,6 +58,19 @@ func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) { … 
 var Set = wire.NewSet(LoadConfig, New, NewHTTPv1)   // drop LoadConfig if there is no config.go
 ```
 
+`config.go` reads one section of `config.json` through `pkg/appconfig` —
+defaults first, then the section over them:
+
+```go
+func LoadConfig(root appconfig.Config) (Config, error) {
+    cfg := Config{MinPasswordLength: 12}
+    if err := root.Section("auth", &cfg); err != nil {
+        return Config{}, err
+    }
+    return cfg, nil
+}
+```
+
 ## 3. Register it
 
 Both files carry `// codegen:` comments marking where each piece goes. Insert
@@ -66,7 +81,15 @@ directly above them so the files keep a predictable shape.
 **`internal/controller/http_v1/controller.go`** — add the import, add the handler
 to the `New(...)` parameter list, and register the route in the body. Admin
 endpoints go through `internal/controller/admin_v1/handlers.go` instead, which
-mounts the same handlers on both listeners.
+mounts the same handlers on both listeners behind a per-route scope:
+
+```go
+admin.GET("/things", scope("things:read"), h.ThingList.Handle)
+```
+
+The scope is a string literal so controllers never import `internal/domain`;
+the permission vocabulary itself lives in `internal/domain/role.go` — add the
+constant there in the same change, or the guard checks a name nothing defines.
 
 Then regenerate:
 
@@ -79,16 +102,20 @@ with *unused provider set* if a `Set` is reachable but nothing consumes it.
 
 ## 4. If it touches the database
 
-Order matters, because sqlc validates queries against the migrations rather than
-a live database:
+Order matters, because sqlc validates queries against `schema/schema.sql`
+rather than a live database:
 
 ```
-1. migrations/NNNNNN_name.{up,down}.sql
-2. make migrate-up
-3. internal/adapter/postgres/queries/<entity>.sql
-4. make generate           # sqlc, then wire
-5. a repository method in internal/adapter/postgres/<entity>_repo.go
+1. schema/schema.sql              (idempotent CREATE TABLE / CREATE INDEX)
+2. internal/adapter/postgres/queries/<entity>.sql
+3. make generate                  # sqlc, then wire
+4. a repository method in internal/adapter/postgres/<entity>_repo.go
 ```
+
+There is no migration tool: the schema is applied at startup, and every
+statement must be idempotent. On an existing database a changed `CREATE TABLE`
+is skipped whole, so evolving a table means an `ALTER TABLE … IF NOT EXISTS`
+repair at the bottom of the file — or, in development, dropping the volume.
 
 The repository method returns domain types and routes its error through
 `MapError`, so the use case only ever sees domain errors.
@@ -99,3 +126,6 @@ A plain struct in the same package implementing the use case's own adapter
 interface — no mocking library. Construct `Usecase{}` directly with those fakes;
 the fields are unexported but the test is in the same package.
 `internal/usecases/auth/auth_token/usecase_test.go` is the reference.
+
+Use cases that manage users or roles must go through `roleguard` — an admin
+action without a rank check is an escalation bug, not a missing feature.

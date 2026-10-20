@@ -35,10 +35,13 @@ const (
 	ActionUserRegistered     = "user.registered"
 	ActionPasswordChanged    = "user.password_changed"
 	ActionPasswordSetByAdmin = "user.password_set_by_admin"
-	ActionAdminGranted       = "user.admin_granted"
-	ActionAdminRevoked       = "user.admin_revoked"
+	ActionRoleAssigned       = "user.role_assigned"
 	ActionUserBlocked        = "user.blocked"
 	ActionUserUnblocked      = "user.unblocked"
+
+	ActionRoleCreated = "role.created"
+	ActionRoleUpdated = "role.updated"
+	ActionRoleDeleted = "role.deleted"
 
 	ActionTokenRefreshed  = "session.refreshed"
 	ActionSessionRevoked  = "session.revoked"

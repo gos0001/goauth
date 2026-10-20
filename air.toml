@@ -4,9 +4,10 @@ tmp_dir = "tmp"
 [build]
   cmd = "go build -o ./bin/app ./cmd"
   bin = "./bin/app"
+  args_bin = ["-config", "config.json"]
   delay = 1000
   exclude_dir = ["tmp", "bin", "generated", "static", "node_modules"]
-  include_ext = ["go", "html", "css"]
+  include_ext = ["go", "html", "css", "json"]
   exclude_regex = ["_test\\.go"]
 
 [screen]

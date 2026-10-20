@@ -7,12 +7,18 @@ import (
 	postgresadapter "github.com/gos0001/goauth/internal/adapter/postgres"
 	"github.com/gos0001/goauth/internal/domain"
 	"github.com/gos0001/goauth/internal/service/audit"
+	"github.com/gos0001/goauth/internal/service/roleguard"
 )
 
 type Postgres interface {
 	GetUserByID(ctx context.Context, id string) (domain.User, error)
-	CountActiveAdmins(ctx context.Context) (int, error)
+	GetRole(ctx context.Context, name string) (domain.Role, error)
+	CountActiveSuperAdmins(ctx context.Context) (int, error)
 	SoftDeleteUser(ctx context.Context, id string, ev *domain.OutboxEvent) (domain.User, error)
+}
+
+type Guard interface {
+	Actor(ctx context.Context, actorUserID string) (domain.Role, error)
 }
 
 type Auditor interface {
@@ -21,11 +27,12 @@ type Auditor interface {
 
 type Usecase struct {
 	postgres Postgres
+	guard    Guard
 	auditor  Auditor
 }
 
-func New(pg *postgresadapter.Adapter, auditor *audit.Recorder) *Usecase {
-	return &Usecase{postgres: pg, auditor: auditor}
+func New(pg *postgresadapter.Adapter, guard *roleguard.Guard, auditor *audit.Recorder) *Usecase {
+	return &Usecase{postgres: pg, guard: guard, auditor: auditor}
 }
 
 // Execute soft-deletes an account: the row stays, its identifiers are cleared,
@@ -49,8 +56,23 @@ func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) {
 		return Output{}, domain.ErrSelfDemote
 	}
 
-	if user.IsAdmin && user.Active() {
-		admins, err := uc.postgres.CountActiveAdmins(ctx)
+	// Strictly above, always: two admins must not be able to delete each
+	// other, because nothing an admin holds would then be safe from another
+	// admin.
+	actor, err := uc.guard.Actor(ctx, in.ActorUserID)
+	if err != nil {
+		return Output{}, err
+	}
+	targetRole, err := uc.postgres.GetRole(ctx, user.Role)
+	if err != nil {
+		return Output{}, err
+	}
+	if err := roleguard.CanActOnUser(actor, targetRole.Rank); err != nil {
+		return Output{}, err
+	}
+
+	if user.IsSuperAdmin() && user.Active() {
+		admins, err := uc.postgres.CountActiveSuperAdmins(ctx)
 		if err != nil {
 			return Output{}, err
 		}

@@ -8,15 +8,15 @@ import (
 )
 
 // Rule is a fixed-window allowance, configured as "<count>/<duration>" —
-// for example "100/15m". It implements envconfig's Decoder so it can be read
-// straight from an environment variable.
+// for example "100/15m". It implements encoding.TextUnmarshaler so it can be
+// read straight from a JSON string.
 type Rule struct {
 	Limit  int
 	Window time.Duration
 }
 
-func (r *Rule) Decode(value string) error {
-	value = strings.TrimSpace(value)
+func (r *Rule) UnmarshalText(text []byte) error {
+	value := strings.TrimSpace(string(text))
 	if value == "" {
 		return nil
 	}

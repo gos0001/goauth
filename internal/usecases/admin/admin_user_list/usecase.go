@@ -50,7 +50,7 @@ func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) {
 			ID:          u.ID,
 			Username:    u.Username,
 			Email:       u.Email,
-			IsAdmin:     u.IsAdmin,
+			Role:        u.Role,
 			Status:      string(u.Status),
 			LastLoginAt: u.LastLoginAt,
 			CreatedAt:   u.CreatedAt,
@@ -101,7 +101,7 @@ type UserView struct {
 	ID          string     `json:"id"`
 	Username    string     `json:"username,omitempty"`
 	Email       string     `json:"email,omitempty"`
-	IsAdmin     bool       `json:"is_admin"`
+	Role        string     `json:"role"`
 	Status      string     `json:"status"`
 	LastLoginAt *time.Time `json:"last_login_at,omitempty"`
 	CreatedAt   time.Time  `json:"created_at"`

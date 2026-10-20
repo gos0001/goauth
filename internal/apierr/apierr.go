@@ -48,7 +48,24 @@ func Write(c *gin.Context, logger *zap.SugaredLogger, op string, err error) {
 	case errors.Is(err, domain.ErrLastAdmin):
 		httpserver.Conflict(c, "cannot remove the last active admin")
 	case errors.Is(err, domain.ErrSelfDemote):
-		httpserver.Conflict(c, "cannot remove your own admin rights")
+		httpserver.Conflict(c, "cannot change your own role")
+
+	case errors.Is(err, domain.ErrRoleNotFound):
+		httpserver.NotFound(c, "role not found")
+	case errors.Is(err, domain.ErrRoleAlreadyExists):
+		httpserver.Conflict(c, "role already exists")
+	case errors.Is(err, domain.ErrRoleInUse):
+		httpserver.Conflict(c, "role is still assigned to users")
+	case errors.Is(err, domain.ErrRoleProtected):
+		httpserver.Forbidden(c, "system role cannot be modified or deleted")
+	case errors.Is(err, domain.ErrRankTaken):
+		httpserver.Conflict(c, "rank is already taken by another role")
+	case errors.Is(err, domain.ErrInsufficientRank):
+		httpserver.Forbidden(c, "insufficient rank")
+	case errors.Is(err, domain.ErrPermissionUnknown):
+		httpserver.BadRequest(c, "unknown permission")
+	case errors.Is(err, domain.ErrPermissionNotHeld):
+		httpserver.Forbidden(c, "cannot grant a permission you do not hold")
 
 	case errors.Is(err, domain.ErrPasswordTooWeak):
 		httpserver.BadRequest(c, "password is too short")

@@ -36,16 +36,24 @@ pick a more specific name: `user_get`, `post_get`.
 every regeneration. Change the source instead: a constructor, a
 `queries/*.sql` file.
 
+## Schema change does nothing on an existing database
+
+`CREATE TABLE IF NOT EXISTS` is skipped whole once the table exists, so a
+column added to the `CREATE` block never appears for deployments that already
+have the table. Restate the change as an idempotent repair at the bottom of
+`schema/schema.sql` (`ALTER TABLE … ADD COLUMN IF NOT EXISTS`), or drop the
+volume in development — the seed rebuilds the floor.
+
 ## sqlc rejects a query: "relation does not exist"
 
-sqlc validates queries against the migrations, not against a live database. A
-query for a table you have not written a migration for cannot compile. Write the
-migration first, apply it, then regenerate.
+sqlc validates queries against `schema/schema.sql`, not against a live
+database. A query for a table absent from the schema cannot compile. Write the
+schema first, then the query, then regenerate.
 
 ## Confusing missing-package error after editing SQL
 
 You ran wire before sqlc. The adapter imports `generated/`, which does not exist
-until sqlc has run. Order is always migrate → sqlc → wire; `make generate` does
+until sqlc has run. Order is always schema → sqlc → wire; `make generate` does
 the last two correctly.
 
 ## Domain type ends up with json tags

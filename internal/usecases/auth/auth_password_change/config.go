@@ -1,12 +1,15 @@
 package auth_password_change
 
-import "github.com/kelseyhightower/envconfig"
+import "github.com/gos0001/goauth/pkg/appconfig"
 
 type Config struct {
-	MinPasswordLength int `envconfig:"AUTH_MIN_PASSWORD_LEN" default:"12"`
+	MinPasswordLength int `json:"min_password_len"`
 }
 
-func LoadConfig() (Config, error) {
-	var cfg Config
-	return cfg, envconfig.Process("", &cfg)
+func LoadConfig(root appconfig.Config) (Config, error) {
+	cfg := Config{MinPasswordLength: 12}
+	if err := root.Section("auth", &cfg); err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
 }

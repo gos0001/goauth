@@ -5,26 +5,34 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/kelseyhightower/envconfig"
-
 	postgresadapter "github.com/gos0001/goauth/internal/adapter/postgres"
 	"github.com/gos0001/goauth/internal/domain"
 	"github.com/gos0001/goauth/internal/service/audit"
+	"github.com/gos0001/goauth/internal/service/roleguard"
+	"github.com/gos0001/goauth/pkg/appconfig"
 	"github.com/gos0001/goauth/pkg/passwordhash"
 )
 
 type Config struct {
-	MinPasswordLength int `envconfig:"AUTH_MIN_PASSWORD_LEN" default:"12"`
+	MinPasswordLength int `json:"min_password_len"`
 }
 
-func LoadConfig() (Config, error) {
-	var cfg Config
-	return cfg, envconfig.Process("", &cfg)
+func LoadConfig(root appconfig.Config) (Config, error) {
+	cfg := Config{MinPasswordLength: 12}
+	if err := root.Section("auth", &cfg); err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
 }
 
 type Postgres interface {
 	GetUserByID(ctx context.Context, id string) (domain.User, error)
+	GetRole(ctx context.Context, name string) (domain.Role, error)
 	SetPasswordAndRevokeSessions(ctx context.Context, id, passwordHash string, ev *domain.OutboxEvent) (domain.User, error)
+}
+
+type Guard interface {
+	Actor(ctx context.Context, actorUserID string) (domain.Role, error)
 }
 
 type Hasher interface {
@@ -37,13 +45,14 @@ type Auditor interface {
 
 type Usecase struct {
 	postgres Postgres
+	guard    Guard
 	hasher   Hasher
 	auditor  Auditor
 	cfg      Config
 }
 
-func New(pg *postgresadapter.Adapter, hasher *passwordhash.Hasher, auditor *audit.Recorder, cfg Config) *Usecase {
-	return &Usecase{postgres: pg, hasher: hasher, auditor: auditor, cfg: cfg}
+func New(pg *postgresadapter.Adapter, guard *roleguard.Guard, hasher *passwordhash.Hasher, auditor *audit.Recorder, cfg Config) *Usecase {
+	return &Usecase{postgres: pg, guard: guard, hasher: hasher, auditor: auditor, cfg: cfg}
 }
 
 // Execute sets a temporary password on someone else's account. It exists so an
@@ -65,6 +74,21 @@ func New(pg *postgresadapter.Adapter, hasher *passwordhash.Hasher, auditor *audi
 func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) {
 	user, err := uc.postgres.GetUserByID(ctx, in.ID)
 	if err != nil {
+		return Output{}, err
+	}
+
+	// Taking over an account is rank-guarded like any other management
+	// action: strictly above the target, always — this endpoint on a peer is
+	// account theft with extra steps.
+	actor, err := uc.guard.Actor(ctx, in.ActorUserID)
+	if err != nil {
+		return Output{}, err
+	}
+	targetRole, err := uc.postgres.GetRole(ctx, user.Role)
+	if err != nil {
+		return Output{}, err
+	}
+	if err := roleguard.CanActOnUser(actor, targetRole.Rank); err != nil {
 		return Output{}, err
 	}
 
@@ -94,9 +118,10 @@ func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) {
 type Input struct {
 	Password string `json:"password"`
 
-	ID    string `json:"-"`
-	Actor string `json:"-"`
-	IP    string `json:"-"`
+	ID          string `json:"-"`
+	ActorUserID string `json:"-"`
+	Actor       string `json:"-"`
+	IP          string `json:"-"`
 }
 
 func (in *Input) Validate() error {

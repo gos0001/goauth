@@ -111,7 +111,7 @@ func (i *Issuer) Rotate(ctx context.Context, presentedHash []byte, user domain.U
 }
 
 func (i *Issuer) sign(user domain.User, session domain.Session, refresh string, c Context) (Pair, error) {
-	access, _, expiresAt, err := i.signer.Sign(user.ID, session.ID, user.IsAdmin, c.AuthTime, c.Now)
+	access, _, expiresAt, err := i.signer.Sign(user.ID, session.ID, user.Role, c.AuthTime, c.Now)
 	if err != nil {
 		return Pair{}, err
 	}

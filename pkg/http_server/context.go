@@ -14,7 +14,7 @@ const (
 	ctxClientIP  = "goauth.client_ip"
 	ctxUserID    = "goauth.user_id"
 	ctxSessionID = "goauth.session_id"
-	ctxIsAdmin   = "goauth.is_admin"
+	ctxRole      = "goauth.role"
 	ctxAuthTime  = "goauth.auth_time"
 	ctxActor     = "goauth.actor"
 )
@@ -23,10 +23,10 @@ func SetClientIP(c *gin.Context, ip string) { c.Set(ctxClientIP, ip) }
 
 func ClientIP(c *gin.Context) string { return str(c, ctxClientIP) }
 
-func SetIdentity(c *gin.Context, userID, sessionID string, isAdmin bool, authTime time.Time) {
+func SetIdentity(c *gin.Context, userID, sessionID, role string, authTime time.Time) {
 	c.Set(ctxUserID, userID)
 	c.Set(ctxSessionID, sessionID)
-	c.Set(ctxIsAdmin, isAdmin)
+	c.Set(ctxRole, role)
 	c.Set(ctxAuthTime, authTime)
 }
 
@@ -34,14 +34,10 @@ func UserID(c *gin.Context) string { return str(c, ctxUserID) }
 
 func SessionID(c *gin.Context) string { return str(c, ctxSessionID) }
 
-func IsAdmin(c *gin.Context) bool {
-	v, ok := c.Get(ctxIsAdmin)
-	if !ok {
-		return false
-	}
-	b, _ := v.(bool)
-	return b
-}
+// Role is the token's role claim: a hint for the frontend, never an
+// authorisation decision — the admin middleware re-reads the role from the
+// database on every request.
+func Role(c *gin.Context) string { return str(c, ctxRole) }
 
 func AuthTime(c *gin.Context) time.Time {
 	v, ok := c.Get(ctxAuthTime)

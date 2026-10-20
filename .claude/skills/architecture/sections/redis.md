@@ -4,9 +4,9 @@ Two layers, same split as Postgres.
 
 ## pkg/redis — the connection
 
-A thin wrapper over go-redis with zero domain imports. Parses `REDIS_URL`,
-connects, pings at startup so a bad URL fails immediately, and exposes `Close`
-for graceful shutdown.
+A thin wrapper over go-redis with zero domain imports. Parses `redis.url` from
+`config.json`, connects, pings at startup so a bad URL fails immediately, and
+exposes `Close` for graceful shutdown.
 
 ## internal/adapter/redis — the domain-facing side
 
@@ -35,11 +35,11 @@ use case.
 
 ## Configuration
 
-| Variable | Default | Purpose |
+| Key | Default | Purpose |
 |---|---|---|
-| `REDIS_URL` | required | e.g. `redis://localhost:6379` |
-| `REDIS_KEY_PREFIX` | `goauth:` | namespace for every key |
-| `REDIS_DEFAULT_TTL` | `1h` | used when `Set` is called with a zero TTL |
+| `redis.url` | required | e.g. `redis://localhost:6379` |
+| `redis.key_prefix` | `goauth:` | namespace for every key |
+| `redis.default_ttl` | `1h` | used when `Set` is called with a zero TTL |
 
 ## Use in middleware
 

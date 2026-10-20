@@ -34,7 +34,7 @@ func TestSignVerifyRoundTrip(t *testing.T) {
 	}
 
 	now := time.Now()
-	raw, jti, expiresAt, err := s.Sign("user-1", "session-1", true, now, now)
+	raw, jti, expiresAt, err := s.Sign("user-1", "session-1", "superadmin", now, now)
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}
@@ -50,7 +50,7 @@ func TestSignVerifyRoundTrip(t *testing.T) {
 	if claims.SessionID != "session-1" {
 		t.Errorf("sid = %q, want session-1", claims.SessionID)
 	}
-	if !claims.Admin {
+	if claims.Role != "superadmin" {
 		t.Error("adm claim lost")
 	}
 	if claims.ID != jti {
@@ -65,7 +65,7 @@ func TestVerifyRejectsTamperedSignature(t *testing.T) {
 	s, _ := New(testConfig(t))
 
 	now := time.Now()
-	raw, _, _, _ := s.Sign("user-1", "session-1", false, now, now)
+	raw, _, _, _ := s.Sign("user-1", "session-1", "user", now, now)
 
 	parts := strings.Split(raw, ".")
 	if len(parts) != 3 {
@@ -90,7 +90,7 @@ func TestVerifyRejectsEscalatedClaims(t *testing.T) {
 	s, _ := New(testConfig(t))
 
 	now := time.Now()
-	raw, _, _, _ := s.Sign("user-1", "session-1", false, now, now)
+	raw, _, _, _ := s.Sign("user-1", "session-1", "user", now, now)
 
 	parts := strings.Split(raw, ".")
 	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
@@ -116,7 +116,7 @@ func TestVerifyRejectsExpired(t *testing.T) {
 	s, _ := New(testConfig(t))
 
 	past := time.Now().Add(-2 * time.Hour)
-	raw, _, _, _ := s.Sign("user-1", "session-1", false, past, past)
+	raw, _, _, _ := s.Sign("user-1", "session-1", "user", past, past)
 
 	_, err := s.Verify(raw)
 	if !errors.Is(err, ErrExpired) {
@@ -133,7 +133,7 @@ func TestVerifyRejectsForeignIssuerAndAudience(t *testing.T) {
 	otherSigner, _ := New(other)
 
 	now := time.Now()
-	raw, _, _, _ := otherSigner.Sign("user-1", "session-1", false, now, now)
+	raw, _, _, _ := otherSigner.Sign("user-1", "session-1", "user", now, now)
 
 	if _, err := s.Verify(raw); err == nil {
 		t.Fatal("token from a different issuer verified")
@@ -147,7 +147,7 @@ func TestPreviousKeysStillVerify(t *testing.T) {
 	oldSigner, _ := New(oldCfg)
 
 	now := time.Now()
-	rawFromOld, _, _, _ := oldSigner.Sign("user-1", "session-1", false, now, now)
+	rawFromOld, _, _, _ := oldSigner.Sign("user-1", "session-1", "user", now, now)
 
 	newSeed := make([]byte, ed25519.SeedSize)
 	for i := range newSeed {
@@ -168,7 +168,7 @@ func TestPreviousKeysStillVerify(t *testing.T) {
 	}
 
 	// And a token minted now must also verify.
-	rawFromNew, _, _, _ := newSigner.Sign("user-2", "session-2", false, now, now)
+	rawFromNew, _, _, _ := newSigner.Sign("user-2", "session-2", "user", now, now)
 	if _, err := newSigner.Verify(rawFromNew); err != nil {
 		t.Fatalf("token signed by the current key does not verify: %v", err)
 	}
@@ -204,7 +204,7 @@ func TestJWKSRoundTrip(t *testing.T) {
 
 	// The published key must actually verify a real signature.
 	now := time.Now()
-	raw, _, _, _ := s.Sign("user-1", "session-1", false, now, now)
+	raw, _, _, _ := s.Sign("user-1", "session-1", "user", now, now)
 
 	parts := strings.Split(raw, ".")
 	signing := parts[0] + "." + parts[1]

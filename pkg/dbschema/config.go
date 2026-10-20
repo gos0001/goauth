@@ -1,6 +1,8 @@
 package dbschema
 
-import "github.com/kelseyhightower/envconfig"
+import (
+	"github.com/gos0001/goauth/pkg/appconfig"
+)
 
 type Config struct {
 	// AutoSchema creates missing tables at startup. On by default so that
@@ -8,10 +10,13 @@ type Config struct {
 	// shipping an image. Set false where a deployment pipeline owns schema
 	// changes; the service then refuses to serve against absent tables rather
 	// than creating them itself.
-	AutoSchema bool `envconfig:"DB_AUTO_SCHEMA" default:"true"`
+	AutoSchema bool `json:"auto_schema"`
 }
 
-func LoadConfig() (Config, error) {
-	var cfg Config
-	return cfg, envconfig.Process("", &cfg)
+func LoadConfig(root appconfig.Config) (Config, error) {
+	cfg := Config{AutoSchema: true}
+	if err := root.Section("db", &cfg); err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
 }

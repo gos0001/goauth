@@ -3,28 +3,34 @@ package outbox_cleaner
 import (
 	"time"
 
-	"github.com/kelseyhightower/envconfig"
+	"github.com/gos0001/goauth/pkg/appconfig"
 )
 
 type Config struct {
 	// Interval is how often the sweep runs. Zero disables the job.
-	Interval time.Duration `envconfig:"OUTBOX_CLEANUP_INTERVAL" default:"1h"`
+	Interval time.Duration `json:"cleanup_interval"`
 
 	// Retention is how long a settled event — delivered, or given up on — is
-	// kept. Reads the same variable the webhook block already uses rather than
-	// inventing a second name for one window.
-	Retention time.Duration `envconfig:"WEBHOOK_RETENTION" default:"168h"`
+	// kept.
+	Retention time.Duration `json:"retention"`
 
 	// MaxAge bounds events that were never delivered and never abandoned.
 	// Deliberately far wider than Retention: deleting one loses it for good, and
 	// it only ever applies to events nothing is going to deliver — delivery
 	// switched off, or an interval of zero. Zero disables it.
-	MaxAge time.Duration `envconfig:"OUTBOX_MAX_AGE" default:"720h"`
+	MaxAge time.Duration `json:"max_age"`
 }
 
-func LoadConfig() (Config, error) {
-	var cfg Config
-	return cfg, envconfig.Process("", &cfg)
+func LoadConfig(root appconfig.Config) (Config, error) {
+	cfg := Config{
+		Interval:  time.Hour,
+		Retention: 168 * time.Hour,
+		MaxAge:    720 * time.Hour,
+	}
+	if err := root.Section("outbox", &cfg); err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
 }
 
 func (c Config) Enabled() bool {

@@ -85,11 +85,11 @@ type Claims struct {
 	SessionID string
 	TokenID   string
 
-	// Admin reflects goauth's own admin flag at the time the token was minted.
+	// Role reflects goauth's own role at the time the token was minted.
 	// Treat it as a hint for rendering, not as an authorisation decision: the
-	// token cannot be revoked before it expires, so a demoted admin still
-	// carries a true value here until then.
-	Admin bool
+	// token cannot be revoked before it expires, so a demoted administrator
+	// still carries the old value here until then.
+	Role string
 
 	ExpiresAt time.Time
 	IssuedAt  time.Time
@@ -177,7 +177,7 @@ func (v *Verifier) parse(raw string) (Claims, error) {
 		UserID:    parsed.Subject,
 		SessionID: parsed.SessionID,
 		TokenID:   parsed.ID,
-		Admin:     parsed.Admin,
+		Role:      parsed.Role,
 	}
 	if parsed.ExpiresAt != nil {
 		out.ExpiresAt = parsed.ExpiresAt.Time
@@ -191,7 +191,7 @@ func (v *Verifier) parse(raw string) (Claims, error) {
 
 type jwtClaims struct {
 	SessionID string `json:"sid"`
-	Admin     bool   `json:"adm"`
+	Role      string `json:"role"`
 	jwt.RegisteredClaims
 }
 

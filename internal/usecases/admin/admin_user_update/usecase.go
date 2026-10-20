@@ -8,13 +8,19 @@ import (
 	postgresadapter "github.com/gos0001/goauth/internal/adapter/postgres"
 	"github.com/gos0001/goauth/internal/domain"
 	"github.com/gos0001/goauth/internal/service/audit"
+	"github.com/gos0001/goauth/internal/service/roleguard"
 )
 
 type Postgres interface {
 	GetUserByID(ctx context.Context, id string) (domain.User, error)
-	CountActiveAdmins(ctx context.Context) (int, error)
+	GetRole(ctx context.Context, name string) (domain.Role, error)
+	CountActiveSuperAdmins(ctx context.Context) (int, error)
 	UpdateUser(ctx context.Context, p postgresadapter.UpdateUserParams) (domain.User, error)
 	UpdateUserAndRevokeSessions(ctx context.Context, p postgresadapter.UpdateUserParams) (domain.User, error)
+}
+
+type Guard interface {
+	Actor(ctx context.Context, actorUserID string) (domain.Role, error)
 }
 
 type Auditor interface {
@@ -23,22 +29,48 @@ type Auditor interface {
 
 type Usecase struct {
 	postgres Postgres
+	guard    Guard
 	auditor  Auditor
 }
 
-func New(pg *postgresadapter.Adapter, auditor *audit.Recorder) *Usecase {
-	return &Usecase{postgres: pg, auditor: auditor}
+func New(pg *postgresadapter.Adapter, guard *roleguard.Guard, auditor *audit.Recorder) *Usecase {
+	return &Usecase{postgres: pg, guard: guard, auditor: auditor}
 }
 
-// Execute applies a partial update to another account: identifiers, status, and
-// the admin flag.
+// Execute applies a partial update to another account: identifiers, status,
+// and role.
 //
 // Two guards exist because their absence is unrecoverable through the API — an
-// installation that demotes or blocks its only admin can then only be repaired
-// with manual SQL against the database.
+// installation that demotes or blocks its only superadmin can then only be
+// repaired with manual SQL against the database.
 func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) {
 	current, err := uc.postgres.GetUserByID(ctx, in.ID)
 	if err != nil {
+		return Output{}, err
+	}
+
+	roleChanges := in.Role != nil && *in.Role != current.Role
+
+	// The rank discipline: the actor must sit strictly above the target,
+	// whatever the edit is. Without this an admin could block another admin,
+	// which is deletion in all but name.
+	actor, err := uc.guard.Actor(ctx, in.ActorUserID)
+	if err != nil {
+		return Output{}, err
+	}
+
+	if roleChanges && in.ActorUserID == current.ID {
+		// Self-reassignment is refused rather than merely warned about, and
+		// before the rank check that would also catch it: the actor would
+		// lose the very rights needed to undo it — or grant themselves more.
+		return Output{}, domain.ErrSelfDemote
+	}
+
+	targetRole, err := uc.postgres.GetRole(ctx, current.Role)
+	if err != nil {
+		return Output{}, err
+	}
+	if err := roleguard.CanActOnUser(actor, targetRole.Rank); err != nil {
 		return Output{}, err
 	}
 
@@ -59,17 +91,23 @@ func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) {
 		p.Email = &v
 	}
 
-	losesAdmin := in.IsAdmin != nil && current.IsAdmin && !*in.IsAdmin
-	losesActive := in.Status != nil && current.Active() && domain.UserStatus(*in.Status) != domain.StatusActive
-
-	if losesAdmin && in.ActorUserID == current.ID {
-		// Self-demotion is refused rather than merely warned about: the actor
-		// would lose the very rights needed to undo it.
-		return Output{}, domain.ErrSelfDemote
+	if roleChanges {
+		// The target role must exist before the update can reference it, and
+		// handing it out means sitting strictly above it as well.
+		assigned, err := uc.postgres.GetRole(ctx, *in.Role)
+		if err != nil {
+			return Output{}, err
+		}
+		if err := roleguard.CanActOnRole(actor, assigned.Rank); err != nil {
+			return Output{}, err
+		}
 	}
 
-	if current.IsAdmin && current.Active() && (losesAdmin || losesActive) {
-		admins, err := uc.postgres.CountActiveAdmins(ctx)
+	losesSuperAdmin := roleChanges && current.IsSuperAdmin()
+	losesActive := in.Status != nil && current.Active() && domain.UserStatus(*in.Status) != domain.StatusActive
+
+	if current.IsSuperAdmin() && current.Active() && (losesSuperAdmin || losesActive) {
+		admins, err := uc.postgres.CountActiveSuperAdmins(ctx)
 		if err != nil {
 			return Output{}, err
 		}
@@ -78,9 +116,9 @@ func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) {
 		}
 	}
 
-	if in.IsAdmin != nil {
-		v := *in.IsAdmin
-		p.IsAdmin = &v
+	if in.Role != nil {
+		v := *in.Role
+		p.Role = &v
 	}
 	if in.Status != nil {
 		v := domain.UserStatus(*in.Status)
@@ -108,7 +146,7 @@ func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) {
 		ID:        updated.ID,
 		Username:  updated.Username,
 		Email:     updated.Email,
-		IsAdmin:   updated.IsAdmin,
+		Role:      updated.Role,
 		Status:    string(updated.Status),
 		UpdatedAt: updated.UpdatedAt,
 	}, nil
@@ -118,11 +156,8 @@ func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) {
 // switching on "user.blocked" should not have to diff two payloads to discover
 // that is what happened; "user.updated" is the fallback for a plain edit.
 func updateEventFor(before domain.User, in Input) string {
-	if in.IsAdmin != nil && *in.IsAdmin != before.IsAdmin {
-		if *in.IsAdmin {
-			return domain.EventAdminGranted
-		}
-		return domain.EventAdminRevoked
+	if in.Role != nil && *in.Role != before.Role {
+		return domain.EventRoleAssigned
 	}
 	if in.Status != nil && domain.UserStatus(*in.Status) != before.Status {
 		if domain.UserStatus(*in.Status) == domain.StatusActive {
@@ -135,14 +170,11 @@ func updateEventFor(before domain.User, in Input) string {
 
 func (uc *Usecase) record(ctx context.Context, in Input, before, after domain.User) {
 	uc.auditor.Record(ctx, audit.Event(in.Actor, domain.ActionUserUpdated, after.ID, in.IP,
-		map[string]any{"status": string(after.Status), "is_admin": after.IsAdmin}))
+		map[string]any{"status": string(after.Status), "role": after.Role}))
 
-	if before.IsAdmin != after.IsAdmin {
-		action := domain.ActionAdminRevoked
-		if after.IsAdmin {
-			action = domain.ActionAdminGranted
-		}
-		uc.auditor.Record(ctx, audit.Event(in.Actor, action, after.ID, in.IP, nil))
+	if before.Role != after.Role {
+		uc.auditor.Record(ctx, audit.Event(in.Actor, domain.ActionRoleAssigned, after.ID, in.IP,
+			map[string]any{"from": before.Role, "to": after.Role}))
 	}
 
 	if before.Status != after.Status {
@@ -161,7 +193,7 @@ type Input struct {
 	Username *string `json:"username"`
 	Email    *string `json:"email"`
 	Status   *string `json:"status"`
-	IsAdmin  *bool   `json:"is_admin"`
+	Role     *string `json:"role"`
 
 	ID string `json:"-"`
 
@@ -177,7 +209,7 @@ func (in *Input) Validate() error {
 	if strings.TrimSpace(in.ID) == "" {
 		return domain.ErrUserNotFound
 	}
-	if in.Username == nil && in.Email == nil && in.Status == nil && in.IsAdmin == nil {
+	if in.Username == nil && in.Email == nil && in.Status == nil && in.Role == nil {
 		return domain.ErrInvalidInput
 	}
 	if in.Status != nil {
@@ -195,7 +227,7 @@ type Output struct {
 	ID        string    `json:"id"`
 	Username  string    `json:"username,omitempty"`
 	Email     string    `json:"email,omitempty"`
-	IsAdmin   bool      `json:"is_admin"`
+	Role      string    `json:"role"`
 	Status    string    `json:"status"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

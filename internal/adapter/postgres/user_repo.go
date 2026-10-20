@@ -19,7 +19,7 @@ type CreateUserParams struct {
 	Username     string
 	Email        string
 	PasswordHash string
-	IsAdmin      bool
+	Role         string
 	Status       domain.UserStatus
 }
 
@@ -29,11 +29,16 @@ func (a *Adapter) CreateUser(ctx context.Context, p CreateUserParams) (domain.Us
 		status = domain.StatusActive
 	}
 
+	role := p.Role
+	if role == "" {
+		role = domain.RoleUser
+	}
+
 	arg := generated.CreateUserParams{
 		Username:     text(p.Username),
 		Email:        text(p.Email),
 		PasswordHash: p.PasswordHash,
-		IsAdmin:      p.IsAdmin,
+		Role:         role,
 		Status:       string(status),
 	}
 
@@ -102,7 +107,7 @@ type UpdateUserParams struct {
 	Username *string
 	Email    *string
 	Status   *domain.UserStatus
-	IsAdmin  *bool
+	Role     *string
 }
 
 func (a *Adapter) UpdateUser(ctx context.Context, p UpdateUserParams) (domain.User, error) {
@@ -111,7 +116,7 @@ func (a *Adapter) UpdateUser(ctx context.Context, p UpdateUserParams) (domain.Us
 		return domain.User{}, domain.ErrUserNotFound
 	}
 
-	arg := generated.UpdateUserParams{ID: id, IsAdmin: boolIn(p.IsAdmin)}
+	arg := generated.UpdateUserParams{ID: id, Role: textIn(p.Role)}
 	if p.Username != nil {
 		arg.Username = text(*p.Username)
 	}
@@ -146,7 +151,7 @@ func (a *Adapter) UpdateUserAndRevokeSessions(ctx context.Context, p UpdateUserP
 		return domain.User{}, domain.ErrUserNotFound
 	}
 
-	arg := generated.UpdateUserParams{ID: id, IsAdmin: boolIn(p.IsAdmin)}
+	arg := generated.UpdateUserParams{ID: id, Role: textIn(p.Role)}
 	if p.Username != nil {
 		arg.Username = text(*p.Username)
 	}
@@ -256,8 +261,8 @@ func (a *Adapter) TouchUserLogin(ctx context.Context, id string) error {
 	return MapError(a.q.TouchUserLogin(ctx, parsed), domain.ErrUserNotFound)
 }
 
-func (a *Adapter) CountActiveAdmins(ctx context.Context) (int, error) {
-	n, err := a.q.CountActiveAdmins(ctx)
+func (a *Adapter) CountActiveSuperAdmins(ctx context.Context) (int, error) {
+	n, err := a.q.CountActiveSuperAdmins(ctx)
 	if err != nil {
 		return 0, MapError(err, nil)
 	}
@@ -317,7 +322,7 @@ func toDomainUser(r generated.GaUser) domain.User {
 		Username:     textOut(r.Username),
 		Email:        textOut(r.Email),
 		PasswordHash: r.PasswordHash,
-		IsAdmin:      r.IsAdmin,
+		Role:         r.Role,
 		Status:       domain.UserStatus(r.Status),
 		LastLoginAt:  tsOutPtr(r.LastLoginAt),
 		CreatedAt:    tsOut(r.CreatedAt),

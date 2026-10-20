@@ -67,9 +67,9 @@ type UserView struct {
 	ID       string `json:"id"`
 	Username string `json:"username,omitempty"`
 	Email    string `json:"email,omitempty"`
-	IsAdmin  bool   `json:"is_admin"`
+	Role     string `json:"role"`
 }
 
 func viewOf(u domain.User) UserView {
-	return UserView{ID: u.ID, Username: u.Username, Email: u.Email, IsAdmin: u.IsAdmin}
+	return UserView{ID: u.ID, Username: u.Username, Email: u.Email, Role: u.Role}
 }

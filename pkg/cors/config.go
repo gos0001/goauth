@@ -6,12 +6,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kelseyhightower/envconfig"
+	"github.com/gos0001/goauth/pkg/appconfig"
 )
 
 type Config struct {
 	// AllowDomains lists the origins a browser application may call from.
-	// Comma-separated, and each entry is an *origin* — scheme included:
+	// Each entry is an *origin* — scheme included:
 	//
 	//	https://app.example.com     one exact origin
 	//	https://*.example.com       any subdomain, but not example.com itself
@@ -20,21 +20,22 @@ type Config struct {
 	//
 	// Empty — the default — sends no CORS headers at all, so browsers block
 	// cross-origin calls. Unset means off here, never permissive.
-	AllowDomains []string `envconfig:"ALLOW_DOMAINS"`
+	AllowDomains []string `json:"allow_domains"`
 
 	// MaxAge is how long a browser may cache the preflight answer.
-	MaxAge time.Duration `envconfig:"CORS_MAX_AGE" default:"12h"`
+	MaxAge time.Duration `json:"max_age"`
 
 	// AllowCredentials adds Access-Control-Allow-Credentials, which a browser
-	// needs before it will send the goauth cookies cross-origin. Not an env
-	// variable on purpose: the wire graph ties it to the authcookie channel's
-	// own switch, so the two can never disagree about whether cookies exist.
+	// needs before it will send the goauth cookies cross-origin. Not in the
+	// config file on purpose: the wire graph ties it to the authcookie
+	// channel's own switch, so the two can never disagree about whether
+	// cookies exist.
 	AllowCredentials bool
 }
 
-func LoadConfig() (Config, error) {
-	var cfg Config
-	if err := envconfig.Process("", &cfg); err != nil {
+func LoadConfig(root appconfig.Config) (Config, error) {
+	cfg := Config{MaxAge: 12 * time.Hour}
+	if err := root.Section("cors", &cfg); err != nil {
 		return cfg, err
 	}
 

@@ -12,12 +12,17 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const countActiveAdmins = `-- name: CountActiveAdmins :one
-SELECT count(*) FROM ga_users WHERE is_admin = true AND status = 'active'
+const countActiveSuperAdmins = `-- name: CountActiveSuperAdmins :one
+SELECT count(*)
+FROM ga_users u
+JOIN ga_roles r ON r.name = u.role
+WHERE r.name = 'superadmin' AND u.status = 'active'
 `
 
-func (q *Queries) CountActiveAdmins(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, countActiveAdmins)
+// The last-superadmin guard: 1 means demoting or deleting this one would lock
+// the installation out of its own admin surface.
+func (q *Queries) CountActiveSuperAdmins(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveSuperAdmins)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -47,7 +52,7 @@ func (q *Queries) CountUsers(ctx context.Context, arg CountUsersParams) (int64, 
 
 const createUser = `-- name: CreateUser :one
 
-INSERT INTO ga_users (username, email, password_hash, is_admin, status)
+INSERT INTO ga_users (username, email, password_hash, role, status)
 VALUES (
     $1,
     $2,
@@ -55,14 +60,14 @@ VALUES (
     $4,
     $5
 )
-RETURNING id, username, email, password_hash, is_admin, status, last_login_at, created_at, updated_at
+RETURNING id, username, email, password_hash, role, status, last_login_at, created_at, updated_at
 `
 
 type CreateUserParams struct {
 	Username     pgtype.Text `json:"username"`
 	Email        pgtype.Text `json:"email"`
 	PasswordHash string      `json:"password_hash"`
-	IsAdmin      bool        `json:"is_admin"`
+	Role         string      `json:"role"`
 	Status       string      `json:"status"`
 }
 
@@ -73,7 +78,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (GaUser,
 		arg.Username,
 		arg.Email,
 		arg.PasswordHash,
-		arg.IsAdmin,
+		arg.Role,
 		arg.Status,
 	)
 	var i GaUser
@@ -82,7 +87,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (GaUser,
 		&i.Username,
 		&i.Email,
 		&i.PasswordHash,
-		&i.IsAdmin,
+		&i.Role,
 		&i.Status,
 		&i.LastLoginAt,
 		&i.CreatedAt,
@@ -92,7 +97,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (GaUser,
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, username, email, password_hash, is_admin, status, last_login_at, created_at, updated_at FROM ga_users WHERE email = $1
+SELECT id, username, email, password_hash, role, status, last_login_at, created_at, updated_at FROM ga_users WHERE email = $1
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email pgtype.Text) (GaUser, error) {
@@ -103,7 +108,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email pgtype.Text) (GaUser
 		&i.Username,
 		&i.Email,
 		&i.PasswordHash,
-		&i.IsAdmin,
+		&i.Role,
 		&i.Status,
 		&i.LastLoginAt,
 		&i.CreatedAt,
@@ -113,7 +118,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email pgtype.Text) (GaUser
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, username, email, password_hash, is_admin, status, last_login_at, created_at, updated_at FROM ga_users WHERE id = $1
+SELECT id, username, email, password_hash, role, status, last_login_at, created_at, updated_at FROM ga_users WHERE id = $1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (GaUser, error) {
@@ -124,7 +129,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (GaUser, error)
 		&i.Username,
 		&i.Email,
 		&i.PasswordHash,
-		&i.IsAdmin,
+		&i.Role,
 		&i.Status,
 		&i.LastLoginAt,
 		&i.CreatedAt,
@@ -134,7 +139,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (GaUser, error)
 }
 
 const getUserByUsername = `-- name: GetUserByUsername :one
-SELECT id, username, email, password_hash, is_admin, status, last_login_at, created_at, updated_at FROM ga_users WHERE username = $1
+SELECT id, username, email, password_hash, role, status, last_login_at, created_at, updated_at FROM ga_users WHERE username = $1
 `
 
 func (q *Queries) GetUserByUsername(ctx context.Context, username pgtype.Text) (GaUser, error) {
@@ -145,7 +150,7 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username pgtype.Text) (
 		&i.Username,
 		&i.Email,
 		&i.PasswordHash,
-		&i.IsAdmin,
+		&i.Role,
 		&i.Status,
 		&i.LastLoginAt,
 		&i.CreatedAt,
@@ -155,14 +160,14 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username pgtype.Text) (
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, username, email, password_hash, is_admin, status, last_login_at, created_at, updated_at FROM ga_users
-WHERE ($1::text IS NULL OR status = $1::text)
+SELECT u.id, u.username, u.email, u.password_hash, u.role, u.status, u.last_login_at, u.created_at, u.updated_at FROM ga_users u
+WHERE ($1::text IS NULL OR u.status = $1::text)
   AND (
         $2::text IS NULL
-     OR username ILIKE '%' || $2::text || '%'
-     OR email    ILIKE '%' || $2::text || '%'
+     OR u.username ILIKE '%' || $2::text || '%'
+     OR u.email    ILIKE '%' || $2::text || '%'
   )
-ORDER BY created_at DESC, id DESC
+ORDER BY u.created_at DESC, u.id DESC
 LIMIT $4 OFFSET $3
 `
 
@@ -192,7 +197,7 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]GaUser,
 			&i.Username,
 			&i.Email,
 			&i.PasswordHash,
-			&i.IsAdmin,
+			&i.Role,
 			&i.Status,
 			&i.LastLoginAt,
 			&i.CreatedAt,
@@ -213,7 +218,7 @@ UPDATE ga_users
 SET password_hash = $1,
     updated_at    = now()
 WHERE id = $2
-RETURNING id, username, email, password_hash, is_admin, status, last_login_at, created_at, updated_at
+RETURNING id, username, email, password_hash, role, status, last_login_at, created_at, updated_at
 `
 
 type SetUserPasswordParams struct {
@@ -229,7 +234,7 @@ func (q *Queries) SetUserPassword(ctx context.Context, arg SetUserPasswordParams
 		&i.Username,
 		&i.Email,
 		&i.PasswordHash,
-		&i.IsAdmin,
+		&i.Role,
 		&i.Status,
 		&i.LastLoginAt,
 		&i.CreatedAt,
@@ -243,14 +248,16 @@ UPDATE ga_users
 SET status     = 'deleted',
     username   = NULL,
     email      = NULL,
-    is_admin   = false,
+    role       = 'user',
     updated_at = now()
 WHERE id = $1
-RETURNING id, username, email, password_hash, is_admin, status, last_login_at, created_at, updated_at
+RETURNING id, username, email, password_hash, role, status, last_login_at, created_at, updated_at
 `
 
 // Soft delete keeps the row so user_id references held by other services never
-// dangle; identifiers are cleared so the address can be reused.
+// dangle; identifiers are cleared so the address can be reused. A deleted
+// account drops back to the plain role: an administrator's rank must not
+// survive the deletion of the administrator.
 func (q *Queries) SoftDeleteUser(ctx context.Context, id uuid.UUID) (GaUser, error) {
 	row := q.db.QueryRow(ctx, softDeleteUser, id)
 	var i GaUser
@@ -259,7 +266,7 @@ func (q *Queries) SoftDeleteUser(ctx context.Context, id uuid.UUID) (GaUser, err
 		&i.Username,
 		&i.Email,
 		&i.PasswordHash,
-		&i.IsAdmin,
+		&i.Role,
 		&i.Status,
 		&i.LastLoginAt,
 		&i.CreatedAt,
@@ -282,29 +289,29 @@ UPDATE ga_users
 SET username   = COALESCE($1, username),
     email      = COALESCE($2, email),
     status     = COALESCE($3, status),
-    is_admin   = COALESCE($4, is_admin),
+    role       = COALESCE($4, role),
     updated_at = now()
 WHERE id = $5
-RETURNING id, username, email, password_hash, is_admin, status, last_login_at, created_at, updated_at
+RETURNING id, username, email, password_hash, role, status, last_login_at, created_at, updated_at
 `
 
 type UpdateUserParams struct {
 	Username pgtype.Text `json:"username"`
 	Email    pgtype.Text `json:"email"`
 	Status   pgtype.Text `json:"status"`
-	IsAdmin  pgtype.Bool `json:"is_admin"`
+	Role     pgtype.Text `json:"role"`
 	ID       uuid.UUID   `json:"id"`
 }
 
 // Partial update: a NULL argument leaves the column untouched, so the caller
-// sends only what changed. The last-admin and self-demotion guards live in the
-// use case, not here.
+// sends only what changed. The last-superadmin and self-demotion guards live
+// in the use case, not here.
 func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (GaUser, error) {
 	row := q.db.QueryRow(ctx, updateUser,
 		arg.Username,
 		arg.Email,
 		arg.Status,
-		arg.IsAdmin,
+		arg.Role,
 		arg.ID,
 	)
 	var i GaUser
@@ -313,7 +320,7 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (GaUser,
 		&i.Username,
 		&i.Email,
 		&i.PasswordHash,
-		&i.IsAdmin,
+		&i.Role,
 		&i.Status,
 		&i.LastLoginAt,
 		&i.CreatedAt,

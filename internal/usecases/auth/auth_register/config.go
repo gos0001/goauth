@@ -3,7 +3,7 @@ package auth_register
 import (
 	"fmt"
 
-	"github.com/kelseyhightower/envconfig"
+	"github.com/gos0001/goauth/pkg/appconfig"
 )
 
 // Registration modes. The default is closed, because the common case for this
@@ -15,27 +15,27 @@ const (
 )
 
 type Config struct {
-	Mode              string `envconfig:"AUTH_REGISTRATION_MODE" default:"closed"`
-	MinPasswordLength int    `envconfig:"AUTH_MIN_PASSWORD_LEN"  default:"12"`
+	Mode              string `json:"registration_mode"`
+	MinPasswordLength int    `json:"min_password_len"`
 
 	// RequireEmail makes an email address mandatory at registration. Off by
 	// default: goauth sends no mail, so an address it cannot verify is just an
 	// identifier like any other.
-	RequireEmail bool `envconfig:"AUTH_REGISTRATION_REQUIRE_EMAIL" default:"false"`
+	RequireEmail bool `json:"registration_require_email"`
 }
 
 func (c Config) Open() bool { return c.Mode == ModeOpen }
 
-func LoadConfig() (Config, error) {
-	var cfg Config
-	if err := envconfig.Process("", &cfg); err != nil {
+func LoadConfig(root appconfig.Config) (Config, error) {
+	cfg := Config{Mode: ModeClosed, MinPasswordLength: 12}
+	if err := root.Section("auth", &cfg); err != nil {
 		return cfg, err
 	}
 
 	switch cfg.Mode {
 	case ModeClosed, ModeOpen:
 	default:
-		return cfg, fmt.Errorf("auth_register: AUTH_REGISTRATION_MODE must be %q or %q, got %q",
+		return cfg, fmt.Errorf("auth_register: auth.registration_mode must be %q or %q, got %q",
 			ModeClosed, ModeOpen, cfg.Mode)
 	}
 

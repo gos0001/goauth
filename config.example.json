@@ -1,0 +1,110 @@
+{
+  "env": "development",
+
+  "app": {
+    "addr": ":8080",
+    "admin_addr": "127.0.0.1:8081"
+  },
+
+  "db": {
+    "url": "postgres://postgres:postgres@localhost:5432/goauth_dev?sslmode=disable",
+    "auto_create": true,
+    "auto_schema": true
+  },
+
+  "redis": {
+    "url": "redis://localhost:6379",
+    "key_prefix": "goauth:",
+    "default_ttl": "1h"
+  },
+
+  "token": {
+    "private_key": "REPLACE_WITH_MAKE_JWT_KEY",
+    "previous_public_keys": [],
+    "issuer": "goauth",
+    "audience": "goauth",
+    "access_ttl": "15m",
+    "refresh_ttl": "720h"
+  },
+
+  "auth": {
+    "registration_mode": "closed",
+    "min_password_len": 12,
+    "registration_require_email": false
+  },
+
+  "seed": {
+    "username": "",
+    "password": "",
+    "email": "",
+    "roles": [
+      {
+        "name": "support",
+        "rank": 20,
+        "permissions": ["users:read", "sessions:read"],
+        "is_system": true
+      }
+    ]
+  },
+
+  "admin": {
+    "token": "",
+    "reauth_window": "15m"
+  },
+
+  "realip": {
+    "trusted_proxies": [],
+    "client_ip_header": ""
+  },
+
+  "cors": {
+    "allow_domains": [],
+    "max_age": "12h"
+  },
+
+  "authcookie": {
+    "enabled": false,
+    "secure": true,
+    "samesite": "strict"
+  },
+
+  "ratelimit": {
+    "key_prefix": "goauth:",
+    "login_ip": "100/15m",
+    "login_pair": "10/15m",
+    "register": "20/1h",
+    "backoff_after": 3,
+    "backoff_base": "1s",
+    "backoff_max": "60s",
+    "failure_window": "15m",
+    "fail_closed": true
+  },
+
+  "webhook": {
+    "url": "",
+    "secret": "",
+    "api_key": "",
+    "timeout": "10s",
+    "interval": "10s",
+    "batch_size": 50,
+    "max_attempts": 10,
+    "backoff_base": "10s",
+    "backoff_max": "1h"
+  },
+
+  "outbox": {
+    "cleanup_interval": "1h",
+    "retention": "168h",
+    "max_age": "720h"
+  },
+
+  "sessions": {
+    "cleanup_interval": "1h"
+  },
+
+  "audit": {
+    "retention": "720h",
+    "max_rows": 0,
+    "cleanup_interval": "6h"
+  }
+}

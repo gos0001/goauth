@@ -16,7 +16,9 @@ type fakePostgres struct {
 	createErr error
 }
 
-func (f *fakePostgres) CountActiveAdmins(context.Context) (int, error) { return f.activeAdmins, nil }
+func (f *fakePostgres) CountActiveSuperAdmins(context.Context) (int, error) {
+	return f.activeAdmins, nil
+}
 
 func (f *fakePostgres) CreateUser(_ context.Context, p postgresadapter.CreateUserParams) (domain.User, error) {
 	if f.createErr != nil {
@@ -28,7 +30,7 @@ func (f *fakePostgres) CreateUser(_ context.Context, p postgresadapter.CreateUse
 		ID:       "seeded-1",
 		Username: p.Username,
 		Email:    p.Email,
-		IsAdmin:  p.IsAdmin,
+		Role:     p.Role,
 		Status:   p.Status,
 	}, nil
 }
@@ -67,8 +69,8 @@ func TestSeedsOnEmptyInstallation(t *testing.T) {
 	}
 
 	got := pg.created[0]
-	if !got.IsAdmin {
-		t.Error("the seeded user is not an admin")
+	if got.Role != domain.RoleSuperAdmin {
+		t.Errorf("role = %q, want superadmin", got.Role)
 	}
 	if got.Username != "superadmin" {
 		t.Errorf("username = %q, want superadmin", got.Username)

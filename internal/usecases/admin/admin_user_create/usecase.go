@@ -6,25 +6,33 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kelseyhightower/envconfig"
-
 	postgresadapter "github.com/gos0001/goauth/internal/adapter/postgres"
 	"github.com/gos0001/goauth/internal/domain"
 	"github.com/gos0001/goauth/internal/service/audit"
+	"github.com/gos0001/goauth/internal/service/roleguard"
+	"github.com/gos0001/goauth/pkg/appconfig"
 	"github.com/gos0001/goauth/pkg/passwordhash"
 )
 
 type Config struct {
-	MinPasswordLength int `envconfig:"AUTH_MIN_PASSWORD_LEN" default:"12"`
+	MinPasswordLength int `json:"min_password_len"`
 }
 
-func LoadConfig() (Config, error) {
-	var cfg Config
-	return cfg, envconfig.Process("", &cfg)
+func LoadConfig(root appconfig.Config) (Config, error) {
+	cfg := Config{MinPasswordLength: 12}
+	if err := root.Section("auth", &cfg); err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
 }
 
 type Postgres interface {
 	CreateUser(ctx context.Context, p postgresadapter.CreateUserParams) (domain.User, error)
+	GetRole(ctx context.Context, name string) (domain.Role, error)
+}
+
+type Guard interface {
+	Actor(ctx context.Context, actorUserID string) (domain.Role, error)
 }
 
 type Hasher interface {
@@ -37,13 +45,14 @@ type Auditor interface {
 
 type Usecase struct {
 	postgres Postgres
+	guard    Guard
 	hasher   Hasher
 	auditor  Auditor
 	cfg      Config
 }
 
-func New(pg *postgresadapter.Adapter, hasher *passwordhash.Hasher, auditor *audit.Recorder, cfg Config) *Usecase {
-	return &Usecase{postgres: pg, hasher: hasher, auditor: auditor, cfg: cfg}
+func New(pg *postgresadapter.Adapter, guard *roleguard.Guard, hasher *passwordhash.Hasher, auditor *audit.Recorder, cfg Config) *Usecase {
+	return &Usecase{postgres: pg, guard: guard, hasher: hasher, auditor: auditor, cfg: cfg}
 }
 
 // Execute provisions an account on someone's behalf. This is how users are
@@ -73,6 +82,26 @@ func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) {
 		return Output{}, err
 	}
 
+	// The role must exist before the user can reference it, and placing
+	// someone into it means sitting strictly above it: creating an account is
+	// also assigning its rank. 'user' when the caller says nothing, so the
+	// panel's simplest form still works.
+	role := in.Role
+	if role == "" {
+		role = domain.RoleUser
+	}
+	assigned, err := uc.postgres.GetRole(ctx, role)
+	if err != nil {
+		return Output{}, err
+	}
+	actor, err := uc.guard.Actor(ctx, in.ActorUserID)
+	if err != nil {
+		return Output{}, err
+	}
+	if err := roleguard.CanActOnRole(actor, assigned.Rank); err != nil {
+		return Output{}, err
+	}
+
 	hash, err := uc.hasher.Hash(in.Password)
 	if err != nil {
 		return Output{}, fmt.Errorf("admin_user_create: hash: %w", err)
@@ -88,7 +117,7 @@ func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) {
 		Username:     username,
 		Email:        email,
 		PasswordHash: hash,
-		IsAdmin:      in.IsAdmin,
+		Role:         role,
 		Status:       status,
 	})
 	if err != nil {
@@ -96,17 +125,18 @@ func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) {
 	}
 
 	uc.auditor.Record(ctx, audit.Event(in.Actor, domain.ActionUserCreated, user.ID, in.IP,
-		map[string]any{"is_admin": user.IsAdmin, "status": string(user.Status)}))
+		map[string]any{"role": user.Role, "status": string(user.Status)}))
 
-	if user.IsAdmin {
-		uc.auditor.Record(ctx, audit.Event(in.Actor, domain.ActionAdminGranted, user.ID, in.IP, nil))
+	if user.Role != domain.RoleUser {
+		uc.auditor.Record(ctx, audit.Event(in.Actor, domain.ActionRoleAssigned, user.ID, in.IP,
+			map[string]any{"role": user.Role}))
 	}
 
 	return Output{
 		ID:        user.ID,
 		Username:  user.Username,
 		Email:     user.Email,
-		IsAdmin:   user.IsAdmin,
+		Role:      user.Role,
 		Status:    string(user.Status),
 		CreatedAt: user.CreatedAt,
 	}, nil
@@ -116,11 +146,12 @@ type Input struct {
 	Username string `json:"username"`
 	Email    string `json:"email"`
 	Password string `json:"password"`
-	IsAdmin  bool   `json:"is_admin"`
+	Role     string `json:"role"`
 	Status   string `json:"status"`
 
-	Actor string `json:"-"`
-	IP    string `json:"-"`
+	ActorUserID string `json:"-"`
+	Actor       string `json:"-"`
+	IP          string `json:"-"`
 }
 
 func (in *Input) Validate() error {
@@ -139,7 +170,7 @@ type Output struct {
 	ID        string    `json:"id"`
 	Username  string    `json:"username,omitempty"`
 	Email     string    `json:"email,omitempty"`
-	IsAdmin   bool      `json:"is_admin"`
+	Role      string    `json:"role"`
 	Status    string    `json:"status"`
 	CreatedAt time.Time `json:"created_at"`
 }

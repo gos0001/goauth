@@ -1,15 +1,18 @@
 package auth_token
 
-import "github.com/kelseyhightower/envconfig"
+import "github.com/gos0001/goauth/pkg/appconfig"
 
 type Config struct {
 	// FailClosed makes an unreachable Redis reject login attempts rather than
 	// wave them through. A cache outage must not silently open a brute-force
 	// window on the one endpoint that checks passwords.
-	FailClosed bool `envconfig:"RATELIMIT_FAIL_CLOSED" default:"true"`
+	FailClosed bool `json:"fail_closed"`
 }
 
-func LoadConfig() (Config, error) {
-	var cfg Config
-	return cfg, envconfig.Process("", &cfg)
+func LoadConfig(root appconfig.Config) (Config, error) {
+	cfg := Config{FailClosed: true}
+	if err := root.Section("ratelimit", &cfg); err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
 }
