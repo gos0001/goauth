@@ -1,92 +1,71 @@
-# TODO — Cookie-канал аутентификации (HttpOnly) для goauth
+# TODO — Строковые durations в config.json (v2.0.2)
 
-Цель: `POST /auth/token` (и связанные эндпоинты) ставит `Set-Cookie`
-(HttpOnly, Secure, SameSite=Strict) **в дополнение** к JSON-ответу.
-JSON остаётся всегда — для non-browser клиентов (CLI, server-to-server, mobile).
-Канал opt-in через `authcookie.enabled` в config.json, по умолчанию выключен.
+Баг: `config.example.json` пишет длительности строками (`"access_ttl": "15m"`),
+а поля конфигов — голый `time.Duration`. Для `encoding/json` это просто int64:
+`TextUnmarshaler` у `time.Duration` в stdlib НЕТ (проверено по
+`$(go env GOROOT)/src/time/time.go` — методы только у `Time`). Копируешь пример
+как есть → при старте:
 
-Радиус: **containment ущерба от XSS** в браузерном SPA — refresh-токен
-перестаёт быть читаемым из JS. Это НЕ защита от самого XSS (CSP и
-санитайзинг — забота фронтенда), и это надо честно написать в доках.
+```
+init app: config section "token": json: cannot unmarshal string into Go
+struct field Config.access_ttl of type time.Duration
+```
 
-Upstream: правим сразу в main (репо и есть upstream), fork-цены нет.
+Контейнер циклично падает. Затронуты ВСЕ Duration-поля: `token.access_ttl` /
+`token.refresh_ttl`, `admin.reauth_window`, `webhook.timeout` / `.backoff_*`,
+`ratelimit.backoff_*` / `.failure_window`, `cors.max_age`, `audit.retention` /
+`.cleanup_interval`, `outbox.*`, `sessions.cleanup_interval`,
+`redis.default_ttl`, `webhook.interval`.
 
-## Статус: реализовано ✅
+Почему проскочило: смоук-тесты этапа 0 гоняли кастомный `Rule` ("5/1m") и
+дефолты при ОТСУТСТВИИ ключей; ни e2e, ни смоук не парсили строковое duration.
+Обход пользователей: опускать duration-поля — срабатывают предзаполненные
+дефолты.
 
-`make test` зелёный (с `-race`), `go build`/`go vet` чистые.
+Радиус: boot-fail на дефолтном примере конфига. Класс: пример-документация
+несовместим с кодом.
 
-## 0. Решения (зафиксированы)
+## План фикса (вариант A — нормализация в appconfig.Section)
 
-- [x] Имена кук: `goauth_access`, `goauth_refresh` — фиксированные константы,
-      без `__Host-` префикса (он требует незапрещаемого Secure, а
-      `authcookie.secure` выключаем для dev-сетапов).
-- [x] SameSite: `strict` по умолчанию, `authcookie.samesite = "lax"` как opt-out.
-- [x] Secure: `authcookie.secure` default `true`.
-- [x] Domain: не ставится (host-only), env нет.
-- [x] Access-кука ставится вместе с refresh.
-- [x] Refresh grant по куке при пустом `refresh_token` в body.
+- [x] `pkg/appconfig`: перед `json.Unmarshal` — `normalizeDurations(dst, raw)`:
+      reflect-обход `dst`, поля типа `time.Duration` (и указатели на него);
+      если raw-значение ключа — JSON-строка → `time.ParseDuration` → подмена
+      значения на число (наносекунды). Числа/null проходят как есть.
+      Ошибка вида `config section "token": access_ttl: time: invalid duration "15x"`
+      — с именем секции и ключа.
+      Ноль изменений в 19 config-структурах, поля остаются `time.Duration`.
+      Реализовано сверх плана: вложенные структуры (dotted-пути), embedded —
+      тоже. Точный текст stdlib-ошибки на текущем Go:
+      `time: unknown unit "x" in duration "15x"`.
+- [x] Отклонено: кастомный тип `appconfig.Duration` (тип-валидно, но диф во все
+      конфиги + конверсии на границах — больше шансов новых багов).
+- [x] Отклонено: числа (наносекунды) в примере — UX-ужас.
 
-## 1. Конфигурация
+## Тесты (то, чего не хватало)
 
-- [x] `pkg/authcookie/config.go`: секция `authcookie` config.json
-      (`enabled`/`secure`/`samesite`), samesite валидируется на старте
-- [x] `config.example.json` — ключи задокументированы
+- [x] `pkg/appconfig/config_test.go`: строка `"15m"`, число, невалидная строка,
+      null → дефолт сохраняется.
+- [x] `cmd/config_example_test.go` — регрессия: читать реальный
+      `config.example.json` (private_key → dummy), прогнать через
+      `appconfig.Load` + все `LoadConfig`, ассерты:
+      `token.AccessTTL == 15m`, `admin.ReauthWindow == 15m`, `cors.MaxAge == 12h`,
+      `audit.Retention == 720h`, `ratelimit.BackoffBase == 1s`,
+      `redis.DefaultTTL == 1h`, `webhook.Timeout == 10s` и т.д.
+      Пример и код больше не смогут разъехаться.
+- [ ] Следующий e2e-смоук — минимум одно строковое duration в конфиге
+      (именно так баг и проскочил). В репо e2e-харнесса нет — пункт для
+      внешнего смоук-цикла; внутри репо регрессию держит тест выше.
 
-## 2. Пакет `pkg/authcookie`
+## Релиз
 
-- [x] `New(cfg)`, `Set(w, access, refresh, accessTTL, refreshTTL)`, `Clear(w)`,
-      `AccessFromRequest(r)`, `RefreshFromRequest(r)`, `Enabled()`
-      — сигнатуры через `net/http`, gin не нужен
-- [x] `wire.go`: `var Set = wire.NewSet(LoadConfig, New)`
-- [x] Unit-тесты: атрибуты, lax, disabled-режим, Clear, roundtrip, пустое значение
+- [x] Коммит `fix: parse string durations in config sections`
+- [ ] Тег `v2.0.2` → CI двигает `:latest` / `:2.0.2` / `:2.0` / `:2`
+- [ ] Примечание пользователям: после v2.0.1 replace-пин не нужен
+      (module path `/v2`), после v2.0.2 duration-поля можно не опускать.
 
-## 3. Выдача: `auth_token`
+## Статус: код готов
 
-- [x] `http_v1.go`: `Set` после успешного grant (оба гранта), refresh из куки
-      при пустом body, JSON не изменился
-- [x] `Pair.RefreshExpiresAt` (`internal/service/tokens/issuer.go`) →
-      `Output.RefreshExpiresAt json:"-"` для Max-Age refresh-куки
-- [ ] Хендлер-тест именно `auth_token` (usecase concrete — нужен свой фейк;
-      путь кук покрыт тестами middleware + authcookie)
-
-## 4. Middleware
-
-- [x] `credential()`: header > кука, `Auth()`/`AuthSilent()`
-- [x] `AdminToken()` не тронут — header-only
-- [x] `*authcookie.Cookies` в конструктор через wire
-- [x] Тесты: кука на обеих поверхностях, приоритет header, disabled → игнор,
-      expired-кука → 401 на обеих поверхностях одинаково, мусор/пустая кука
-
-## 5. Смежные эндпоинты
-
-- [x] `auth_password_change` — перевыпуск кук новой парой (`RefreshExpiresAt` тоже)
-- [x] `auth_revoke` / `auth_logout_all` — `Clear`
-- [ ] Отдельные хендлер-тесты (правка — по одному вызову, покрыто тестами пакета)
-
-## 6. CORS
-
-- [x] `Config.AllowCredentials` (не в конфиге) + `NewWithCookies` в wire — флаг
-      склеивается из `authcookie.Enabled()`, разъехаться не может
-- [x] `Access-Control-Allow-Credentials: true` на простые ответы и preflight
-- [x] Fail-fast: `*` + credentials → ошибка на старте
-- [x] Тесты: заголовок по/вне allowlist, отсутствие по умолчанию, wildcard-отказ
-
-## 7. Wire / codegen
-
-- [x] `authcookie.Set` в `cmd/wire.go`, `wire ./cmd/` прогнан, маркеры на месте
-
-## 8. Документация
-
-- [x] `README.md`: раздел «Cookie channel», строка у эндпоинтов, 3 строки
-      в таблице конфигурации
-- [x] `plugin/skills/goauth/SKILL.md` — абзац про канал
-- [x] `plugin/commands/goauth-verify.md` — сценарий с cookie-jar
-
-## 9. Приёмка
-
-- [x] `make test` зелёный
-- [ ] Ручной сценарий на живом сервисе: login → jar → `/auth/me` без заголовка →
-      refresh с пустым body → `/auth/logout-all` → куки удалены → 401
-      (шаги воспроизведены в `goauth-verify.md`)
-- [x] Выключен — поведение как раньше (тесты middleware/cors/authcookie
-      фиксируют disabled-режим)
+`make test` зелёный (`-race`), `go vet` / `golangci-lint` чистые.
+Смоук: `config.example.json` с dummy-ключом через `go run ./cmd` — все
+секции парсятся, boot доходит до redis-dial (сервисы не подняты), а не до
+unmarshal-ошибки. Осталось: тег + примечание.
