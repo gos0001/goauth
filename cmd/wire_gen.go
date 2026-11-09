@@ -178,16 +178,20 @@ func InitializeApp(configPath string) (*App, error) {
 	auth_revokeHTTPv1 := auth_revoke.NewHTTPv1(auth_revokeUsecase, cookies, sugaredLogger)
 	auth_logout_allUsecase := auth_logout_all.New(adapter, recorder)
 	auth_logout_allHTTPv1 := auth_logout_all.NewHTTPv1(auth_logout_allUsecase, cookies, sugaredLogger)
-	guard := roleguard.New(adapter)
+	roleguardConfig, err := roleguard.LoadConfig(config)
+	if err != nil {
+		return nil, err
+	}
+	guard := roleguard.New(adapter, roleguardConfig)
 	admin_user_createConfig, err := admin_user_create.LoadConfig(config)
 	if err != nil {
 		return nil, err
 	}
 	admin_user_createUsecase := admin_user_create.New(adapter, guard, hasher, recorder, admin_user_createConfig)
 	admin_user_createHTTPv1 := admin_user_create.NewHTTPv1(admin_user_createUsecase, sugaredLogger)
-	admin_user_listUsecase := admin_user_list.New(adapter)
+	admin_user_listUsecase := admin_user_list.New(adapter, guard)
 	admin_user_listHTTPv1 := admin_user_list.NewHTTPv1(admin_user_listUsecase, sugaredLogger)
-	admin_user_getUsecase := admin_user_get.New(adapter)
+	admin_user_getUsecase := admin_user_get.New(adapter, guard)
 	admin_user_getHTTPv1 := admin_user_get.NewHTTPv1(admin_user_getUsecase, sugaredLogger)
 	admin_user_updateUsecase := admin_user_update.New(adapter, guard, recorder)
 	admin_user_updateHTTPv1 := admin_user_update.NewHTTPv1(admin_user_updateUsecase, sugaredLogger)
@@ -199,7 +203,7 @@ func InitializeApp(configPath string) (*App, error) {
 	}
 	admin_user_set_passwordUsecase := admin_user_set_password.New(adapter, guard, hasher, recorder, admin_user_set_passwordConfig)
 	admin_user_set_passwordHTTPv1 := admin_user_set_password.NewHTTPv1(admin_user_set_passwordUsecase, sugaredLogger)
-	admin_user_sessions_listUsecase := admin_user_sessions_list.New(adapter)
+	admin_user_sessions_listUsecase := admin_user_sessions_list.New(adapter, guard)
 	admin_user_sessions_listHTTPv1 := admin_user_sessions_list.NewHTTPv1(admin_user_sessions_listUsecase, sugaredLogger)
 	admin_user_sessions_revokeUsecase := admin_user_sessions_revoke.New(adapter, guard, recorder)
 	admin_user_sessions_revokeHTTPv1 := admin_user_sessions_revoke.NewHTTPv1(admin_user_sessions_revokeUsecase, sugaredLogger)

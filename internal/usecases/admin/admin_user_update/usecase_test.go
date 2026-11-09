@@ -15,6 +15,7 @@ type fakePostgres struct {
 
 	updated         []postgresadapter.UpdateUserParams
 	revokedOnUpdate bool
+	ownerWrites     []string // (user, owner) pairs, flat
 }
 
 func (f *fakePostgres) GetUserByID(_ context.Context, id string) (domain.User, error) {
@@ -56,6 +57,14 @@ func (f *fakePostgres) UpdateUserAndRevokeSessions(_ context.Context, p postgres
 	return f.apply(p), nil
 }
 
+func (f *fakePostgres) UpdateUserOwner(_ context.Context, id, owner string, _ *domain.OutboxEvent) (domain.User, error) {
+	f.ownerWrites = append(f.ownerWrites, id, owner)
+	u := f.users[id]
+	u.CreatedBy = owner
+	f.users[id] = u
+	return u, nil
+}
+
 func (f *fakePostgres) apply(p postgresadapter.UpdateUserParams) domain.User {
 	u := f.users[p.ID]
 	if p.Username != nil {
@@ -87,6 +96,15 @@ type fakeGuard struct{ role domain.Role }
 
 func (f fakeGuard) Actor(_ context.Context, _ string) (domain.Role, error) {
 	return f.role, nil
+}
+
+// Off-mode semantics: rank only, no ownership. The delegated rules are
+// covered in roleguard's own tests.
+func (f fakeGuard) CanActOnUser(actor domain.Role, _ string, _ domain.User, targetRole domain.Role) error {
+	if !domain.CanManage(actor.Rank, targetRole.Rank) {
+		return domain.ErrInsufficientRank
+	}
+	return nil
 }
 
 func superGuard() fakeGuard {
@@ -251,6 +269,91 @@ func TestValidateRejectsEmptyPatch(t *testing.T) {
 	in := Input{ID: "user-1"}
 	if err := in.Validate(); !errors.Is(err, domain.ErrInvalidInput) {
 		t.Fatalf("err = %v, want ErrInvalidInput", err)
+	}
+}
+
+func TestValidateOwnerMustBeUUID(t *testing.T) {
+	in := Input{ID: "user-1", Owner: ptr("not-a-uuid")}
+	if err := in.Validate(); !errors.Is(err, domain.ErrInvalidInput) {
+		t.Fatalf("err = %v, want ErrInvalidInput", err)
+	}
+	// The empty string is valid: it means "unassign".
+	in = Input{ID: "user-1", Owner: ptr("")}
+	if err := in.Validate(); err != nil {
+		t.Fatalf("unassign should validate: %v", err)
+	}
+}
+
+// Re-pointing created_by is the superadmin's lever; a delegated admin who
+// could do it could give themselves anybody's user.
+func TestOwnerTransferIsSuperAdminOnly(t *testing.T) {
+	uc, _, _ := harnessWith(adminGuard(), admin("admin-1"), member("user-1"))
+
+	_, err := uc.Execute(context.Background(), Input{
+		ID: "user-1", ActorUserID: "admin-1", Owner: ptr("admin-2"),
+	})
+	if !errors.Is(err, domain.ErrInsufficientRank) {
+		t.Fatalf("err = %v, want ErrInsufficientRank", err)
+	}
+}
+
+// A transfer must land on a real account that outranks the row; an owner
+// who cannot manage the user would leave the row stranded.
+func TestOwnerTransferRequiresExistingOwner(t *testing.T) {
+	uc, _, _ := harness(member("user-1"))
+
+	_, err := uc.Execute(context.Background(), Input{
+		ID: "user-1", Owner: ptr("11111111-1111-1111-1111-111111111111"),
+	})
+	if !errors.Is(err, domain.ErrUserNotFound) {
+		t.Fatalf("err = %v, want ErrUserNotFound", err)
+	}
+}
+
+func TestOwnerTransferRejectsEqualRankOwner(t *testing.T) {
+	uc, _, _ := harness(member("user-1"), member("user-2"))
+
+	_, err := uc.Execute(context.Background(), Input{
+		ID: "user-1", Owner: ptr("user-2"),
+	})
+	if !errors.Is(err, domain.ErrInsufficientRank) {
+		t.Fatalf("err = %v, want ErrInsufficientRank", err)
+	}
+}
+
+// Ownership alone must not fire the main UPDATE: it would touch nothing but
+// updated_at and emit a misleading event name.
+func TestOwnerOnlyPatchSkipsMainUpdate(t *testing.T) {
+	uc, pg, _ := harness(member("user-1"), admin("admin-1"))
+
+	out, err := uc.Execute(context.Background(), Input{ID: "user-1", Owner: ptr("admin-1")})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if len(pg.updated) != 0 {
+		t.Fatalf("main update ran %d times, want 0", len(pg.updated))
+	}
+	if len(pg.ownerWrites) != 2 || pg.ownerWrites[1] != "admin-1" {
+		t.Fatalf("ownerWrites = %v, want one write to admin-1", pg.ownerWrites)
+	}
+	if out.CreatedBy != "admin-1" {
+		t.Fatalf("out.CreatedBy = %q, want admin-1 (superadmin caller)", out.CreatedBy)
+	}
+}
+
+// Promoting a user above their owner would detach the row from the only
+// admin who is supposed to manage it.
+func TestRoleChangeCannotOutrankOwner(t *testing.T) {
+	owner := domain.User{ID: "admin-1", Username: "admin-1", Role: domain.RoleAdmin, Status: domain.StatusActive}
+	owned := member("user-1")
+	owned.CreatedBy = "admin-1"
+	uc, _, _ := harness(owned, owner)
+
+	_, err := uc.Execute(context.Background(), Input{
+		ID: "user-1", Role: ptr(domain.RoleSuperAdmin),
+	})
+	if !errors.Is(err, domain.ErrInsufficientRank) {
+		t.Fatalf("err = %v, want ErrInsufficientRank", err)
 	}
 }
 

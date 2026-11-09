@@ -62,6 +62,8 @@ func Write(c *gin.Context, logger *zap.SugaredLogger, op string, err error) {
 		httpserver.Conflict(c, "rank is already taken by another role")
 	case errors.Is(err, domain.ErrInsufficientRank):
 		httpserver.Forbidden(c, "insufficient rank")
+	case errors.Is(err, domain.ErrUserNotOwned):
+		httpserver.Forbidden(c, "user is not owned by the actor")
 	case errors.Is(err, domain.ErrPermissionUnknown):
 		httpserver.BadRequest(c, "unknown permission")
 	case errors.Is(err, domain.ErrPermissionNotHeld):

@@ -33,6 +33,7 @@ type Postgres interface {
 
 type Guard interface {
 	Actor(ctx context.Context, actorUserID string) (domain.Role, error)
+	CanActOnUser(actor domain.Role, actorID string, target domain.User, targetRole domain.Role) error
 }
 
 type Hasher interface {
@@ -88,7 +89,7 @@ func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) {
 	if err != nil {
 		return Output{}, err
 	}
-	if err := roleguard.CanActOnUser(actor, targetRole.Rank); err != nil {
+	if err := uc.guard.CanActOnUser(actor, in.ActorUserID, user, targetRole); err != nil {
 		return Output{}, err
 	}
 

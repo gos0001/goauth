@@ -29,22 +29,32 @@ func (q *Queries) CountActiveSuperAdmins(ctx context.Context) (int64, error) {
 }
 
 const countUsers = `-- name: CountUsers :one
-SELECT count(*) FROM ga_users
-WHERE ($1::text IS NULL OR status = $1::text)
+SELECT count(*) FROM ga_users u
+WHERE ($1::text IS NULL OR u.status = $1::text)
   AND (
         $2::text IS NULL
-     OR username ILIKE '%' || $2::text || '%'
-     OR email    ILIKE '%' || $2::text || '%'
+     OR u.username ILIKE '%' || $2::text || '%'
+     OR u.email    ILIKE '%' || $2::text || '%'
   )
+  AND ($3::int IS NULL OR EXISTS (
+        SELECT 1 FROM ga_roles r WHERE r.name = u.role AND r.rank < $3::int))
+  AND ($4::uuid IS NULL OR u.created_by = $4::uuid)
 `
 
 type CountUsersParams struct {
-	Status pgtype.Text `json:"status"`
-	Q      pgtype.Text `json:"q"`
+	Status  pgtype.Text `json:"status"`
+	Q       pgtype.Text `json:"q"`
+	MinRank pgtype.Int4 `json:"min_rank"`
+	Owner   pgtype.UUID `json:"owner"`
 }
 
 func (q *Queries) CountUsers(ctx context.Context, arg CountUsersParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countUsers, arg.Status, arg.Q)
+	row := q.db.QueryRow(ctx, countUsers,
+		arg.Status,
+		arg.Q,
+		arg.MinRank,
+		arg.Owner,
+	)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -52,15 +62,16 @@ func (q *Queries) CountUsers(ctx context.Context, arg CountUsersParams) (int64, 
 
 const createUser = `-- name: CreateUser :one
 
-INSERT INTO ga_users (username, email, password_hash, role, status)
+INSERT INTO ga_users (username, email, password_hash, role, status, created_by)
 VALUES (
     $1,
     $2,
     $3,
     $4,
-    $5
+    $5,
+    $6
 )
-RETURNING id, username, email, password_hash, role, status, last_login_at, created_at, updated_at
+RETURNING id, username, email, password_hash, role, status, last_login_at, created_at, updated_at, created_by
 `
 
 type CreateUserParams struct {
@@ -69,6 +80,7 @@ type CreateUserParams struct {
 	PasswordHash string      `json:"password_hash"`
 	Role         string      `json:"role"`
 	Status       string      `json:"status"`
+	CreatedBy    pgtype.UUID `json:"created_by"`
 }
 
 // Identifiers arrive already normalised (trimmed, lowercased) from the use
@@ -80,6 +92,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (GaUser,
 		arg.PasswordHash,
 		arg.Role,
 		arg.Status,
+		arg.CreatedBy,
 	)
 	var i GaUser
 	err := row.Scan(
@@ -92,12 +105,13 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (GaUser,
 		&i.LastLoginAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CreatedBy,
 	)
 	return i, err
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, username, email, password_hash, role, status, last_login_at, created_at, updated_at FROM ga_users WHERE email = $1
+SELECT id, username, email, password_hash, role, status, last_login_at, created_at, updated_at, created_by FROM ga_users WHERE email = $1
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email pgtype.Text) (GaUser, error) {
@@ -113,12 +127,13 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email pgtype.Text) (GaUser
 		&i.LastLoginAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CreatedBy,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, username, email, password_hash, role, status, last_login_at, created_at, updated_at FROM ga_users WHERE id = $1
+SELECT id, username, email, password_hash, role, status, last_login_at, created_at, updated_at, created_by FROM ga_users WHERE id = $1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (GaUser, error) {
@@ -134,12 +149,13 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (GaUser, error)
 		&i.LastLoginAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CreatedBy,
 	)
 	return i, err
 }
 
 const getUserByUsername = `-- name: GetUserByUsername :one
-SELECT id, username, email, password_hash, role, status, last_login_at, created_at, updated_at FROM ga_users WHERE username = $1
+SELECT id, username, email, password_hash, role, status, last_login_at, created_at, updated_at, created_by FROM ga_users WHERE username = $1
 `
 
 func (q *Queries) GetUserByUsername(ctx context.Context, username pgtype.Text) (GaUser, error) {
@@ -155,33 +171,45 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username pgtype.Text) (
 		&i.LastLoginAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CreatedBy,
 	)
 	return i, err
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT u.id, u.username, u.email, u.password_hash, u.role, u.status, u.last_login_at, u.created_at, u.updated_at FROM ga_users u
+SELECT u.id, u.username, u.email, u.password_hash, u.role, u.status, u.last_login_at, u.created_at, u.updated_at, u.created_by FROM ga_users u
 WHERE ($1::text IS NULL OR u.status = $1::text)
   AND (
         $2::text IS NULL
      OR u.username ILIKE '%' || $2::text || '%'
      OR u.email    ILIKE '%' || $2::text || '%'
   )
+  -- Delegated visibility. NULL min_rank / NULL owner mean the filter is off
+  -- (mode "off", or a superadmin): the result is then identical to the
+  -- unfiltered query. min_rank keeps only users strictly below the actor;
+  -- owner keeps only users created by them.
+  AND ($3::int IS NULL OR EXISTS (
+        SELECT 1 FROM ga_roles r WHERE r.name = u.role AND r.rank < $3::int))
+  AND ($4::uuid IS NULL OR u.created_by = $4::uuid)
 ORDER BY u.created_at DESC, u.id DESC
-LIMIT $4 OFFSET $3
+LIMIT $6 OFFSET $5
 `
 
 type ListUsersParams struct {
-	Status pgtype.Text `json:"status"`
-	Q      pgtype.Text `json:"q"`
-	Off    int32       `json:"off"`
-	Lim    int32       `json:"lim"`
+	Status  pgtype.Text `json:"status"`
+	Q       pgtype.Text `json:"q"`
+	MinRank pgtype.Int4 `json:"min_rank"`
+	Owner   pgtype.UUID `json:"owner"`
+	Off     int32       `json:"off"`
+	Lim     int32       `json:"lim"`
 }
 
 func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]GaUser, error) {
 	rows, err := q.db.Query(ctx, listUsers,
 		arg.Status,
 		arg.Q,
+		arg.MinRank,
+		arg.Owner,
 		arg.Off,
 		arg.Lim,
 	)
@@ -202,6 +230,7 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]GaUser,
 			&i.LastLoginAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.CreatedBy,
 		); err != nil {
 			return nil, err
 		}
@@ -218,7 +247,7 @@ UPDATE ga_users
 SET password_hash = $1,
     updated_at    = now()
 WHERE id = $2
-RETURNING id, username, email, password_hash, role, status, last_login_at, created_at, updated_at
+RETURNING id, username, email, password_hash, role, status, last_login_at, created_at, updated_at, created_by
 `
 
 type SetUserPasswordParams struct {
@@ -239,6 +268,7 @@ func (q *Queries) SetUserPassword(ctx context.Context, arg SetUserPasswordParams
 		&i.LastLoginAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CreatedBy,
 	)
 	return i, err
 }
@@ -251,7 +281,7 @@ SET status     = 'deleted',
     role       = 'user',
     updated_at = now()
 WHERE id = $1
-RETURNING id, username, email, password_hash, role, status, last_login_at, created_at, updated_at
+RETURNING id, username, email, password_hash, role, status, last_login_at, created_at, updated_at, created_by
 `
 
 // Soft delete keeps the row so user_id references held by other services never
@@ -271,6 +301,7 @@ func (q *Queries) SoftDeleteUser(ctx context.Context, id uuid.UUID) (GaUser, err
 		&i.LastLoginAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CreatedBy,
 	)
 	return i, err
 }
@@ -292,7 +323,7 @@ SET username   = COALESCE($1, username),
     role       = COALESCE($4, role),
     updated_at = now()
 WHERE id = $5
-RETURNING id, username, email, password_hash, role, status, last_login_at, created_at, updated_at
+RETURNING id, username, email, password_hash, role, status, last_login_at, created_at, updated_at, created_by
 `
 
 type UpdateUserParams struct {
@@ -325,6 +356,37 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (GaUser,
 		&i.LastLoginAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CreatedBy,
+	)
+	return i, err
+}
+
+const updateUserOwner = `-- name: UpdateUserOwner :one
+UPDATE ga_users SET created_by = $2, updated_at = now() WHERE id = $1 RETURNING id, username, email, password_hash, role, status, last_login_at, created_at, updated_at, created_by
+`
+
+type UpdateUserOwnerParams struct {
+	ID        uuid.UUID   `json:"id"`
+	CreatedBy pgtype.UUID `json:"created_by"`
+}
+
+// Transfer or clear delegated ownership. Unlike UpdateUser this is a plain
+// arg, not an narg: NULL is a meaningful value here (unassign the owner),
+// never "leave the column alone".
+func (q *Queries) UpdateUserOwner(ctx context.Context, arg UpdateUserOwnerParams) (GaUser, error) {
+	row := q.db.QueryRow(ctx, updateUserOwner, arg.ID, arg.CreatedBy)
+	var i GaUser
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Role,
+		&i.Status,
+		&i.LastLoginAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CreatedBy,
 	)
 	return i, err
 }

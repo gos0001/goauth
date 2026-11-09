@@ -20,6 +20,10 @@ func NewHTTPv1(uc *Usecase, logger *zap.SugaredLogger) *HTTPv1 {
 func (h *HTTPv1) Handle(c *gin.Context) {
 	in := Input{ID: c.Param("id")}
 
+	// Empty on the machine listener, where the caller is modelled as a
+	// superadmin anyway.
+	in.ActorUserID = httpserver.UserID(c)
+
 	if err := in.Validate(); err != nil {
 		apierr.Write(c, h.logger, "admin get user", err)
 		return

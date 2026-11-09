@@ -6,7 +6,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/gos0001/goauth/v2)](https://goreportcard.com/report/github.com/gos0001/goauth/v2)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-> **Stable: `v2.0.1`** — `ghcr.io/gos0001/goauth:2`
+> **Stable: `v2.1.0`** — `ghcr.io/gos0001/goauth:2`
 
 Identity service in a container. Users, passwords, sessions, and Ed25519-signed
 JWTs your services verify offline. It answers **who is this user** and, for its
@@ -133,7 +133,9 @@ goauth's admin surface is gated by a role hierarchy, not a single admin flag.
 **Roles** live in the database: a name, a **rank**, and a set of **permissions**
 (fixed vocabulary — `users:read`, `users:create`, `users:update`,
 `users:delete`, `password:set`, `sessions:read`, `sessions:revoke`,
-`audit:read`, `roles:read`, `roles:manage`). The shipped floor:
+`audit:read`, `roles:read`, `roles:manage`, plus the ownership exceptions
+`users:read_all` and `users:manage_all`, see
+[Delegated ownership](#delegated-ownership)). The shipped floor:
 
 | Role | Rank | Permissions |
 |---|---|---|
@@ -171,6 +173,52 @@ Access tokens carry the role as a `role` claim — a hint for rendering, never a
 authorisation decision: every admin request re-reads the role, rank and
 permissions from the database, so a demotion takes effect on the next request,
 not at token expiry.
+
+### Delegated ownership
+
+`admin.ownership = "delegated"` (default `"off"`) turns creation into an
+implicit administrative unit: every user row remembers its creator
+(`created_by`), and a non-superadmin sees and manages **only users strictly
+below their own rank that they created**. Superadmins — the machine token on
+the private listener included — see and manage everything, as before. With
+`"off"` the deployment behaves exactly as it did before the field existed.
+
+The rules in delegated mode:
+
+- **Create**: a non-superadmin becomes the owner of what they create, whatever
+  they send in `owner` (the field is silently theirs; a panel need not know it
+  exists). A superadmin may set `owner` to any account that outranks the new
+  user's role, or leave it empty for an unowned row.
+- **Read**: `GET /admin/users` and `GET /admin/users/{id}` are scoped the same
+  way; out of scope collapses to `404`, so an equal or a superior is not
+  confirmed to exist. Listing a user's sessions is scoped like a mutation.
+- **Mutate**: update, delete, set-password, revoke-sessions additionally
+  require `created_by = actor`. Missing ownership is `403`
+  (`user is not owned by the actor`).
+- **Exceptions**: `users:read_all` widens reading to every user below the
+  actor's rank, `users:manage_all` the mutations. Both ship only with
+  `superadmin`, and the "cannot grant what you do not hold" rule keeps it that
+  way — a delegated admin cannot mint them for themselves.
+- **Transfer**: `PATCH /admin/users/{id}` with `owner` re-points (or, with
+  `""`, clears) ownership. Superadmin-only. The new owner must outrank the
+  user's role, and a role change may not promote a user above the owner left
+  in place — otherwise the transfer would strand the row.
+
+`created_by` appears in API responses only for superadmin callers, so the
+field never reveals to a delegated admin that accounts above them exist.
+Webhook payloads always carry it (`"created_by": "<uuid>"` or `null`) — the
+receiver is trusted with the HMAC secret and mirrors ownership on its side.
+
+`GET /admin/audit` stays unscoped: a holder of `audit:read` sees every entry,
+including superadmin actions.
+
+**Upgrading from v2.0.1**: `created_by` lives in the `CREATE TABLE` statement
+only — the service keeps no migrations. A database created by an older binary
+never gains the column, and the new binary refuses to start on it, failing at
+index creation with `column "created_by" does not exist` before opening its
+listeners. That fail-fast is deliberate (a runtime failure would be worse);
+recreate the database to upgrade — goauth rebuilds schema, roles and the seed
+admin on start.
 
 ## Logging in
 
@@ -312,6 +360,7 @@ for every key with its default). No environment variables.
 | `seed.roles` | — | custom roles seeded at startup, never overwriting runtime changes; ranks 1–99 |
 | `admin.token` | — | empty disables the machine listener |
 | `admin.reauth_window` | `15m` | password re-entry for destructive admin calls |
+| `admin.ownership` | `off` | or `delegated` — see [Delegated ownership](#delegated-ownership) |
 | `realip.trusted_proxies` | — | CIDRs, `cloudflare`, or `private` |
 | `realip.client_ip_header` | — | `CF-Connecting-IP`, `X-Forwarded-For` |
 | `cors.allow_domains` | — | CORS origins; empty blocks browsers |

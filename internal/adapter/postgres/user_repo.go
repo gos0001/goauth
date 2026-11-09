@@ -4,9 +4,9 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-
 	"github.com/gos0001/goauth/v2/internal/adapter/postgres/generated"
 	"github.com/gos0001/goauth/v2/internal/domain"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // CreateUserParams carries only what the caller decides; the database supplies
@@ -21,6 +21,9 @@ type CreateUserParams struct {
 	PasswordHash string
 	Role         string
 	Status       domain.UserStatus
+
+	// CreatedBy is the delegated owner; "" stores NULL, an unowned row.
+	CreatedBy string
 }
 
 func (a *Adapter) CreateUser(ctx context.Context, p CreateUserParams) (domain.User, error) {
@@ -34,18 +37,25 @@ func (a *Adapter) CreateUser(ctx context.Context, p CreateUserParams) (domain.Us
 		role = domain.RoleUser
 	}
 
+	createdBy, err := pgUUID(p.CreatedBy)
+	if err != nil {
+		// An unparseable owner id can only mean "no such user".
+		return domain.User{}, domain.ErrUserNotFound
+	}
+
 	arg := generated.CreateUserParams{
 		Username:     text(p.Username),
 		Email:        text(p.Email),
 		PasswordHash: p.PasswordHash,
 		Role:         role,
 		Status:       string(status),
+		CreatedBy:    createdBy,
 	}
 
 	// A transaction even though this is one insert: the event has to land with
 	// it or not at all.
 	var out domain.User
-	err := a.withTx(ctx, func(q *generated.Queries) error {
+	err = a.withTx(ctx, func(q *generated.Queries) error {
 		row, err := q.CreateUser(ctx, arg)
 		if err != nil {
 			return MapError(err, domain.ErrUserAlreadyExists)
@@ -274,15 +284,32 @@ type ListUsersParams struct {
 	Status domain.UserStatus
 	Limit  int
 	Offset int
+
+	// MinRank and Owner are the delegated-visibility filters; nil disables
+	// the filter, which is what mode "off" and superadmin callers send.
+	MinRank *int32
+	Owner   *string
 }
 
 func (a *Adapter) ListUsers(ctx context.Context, p ListUsersParams) ([]domain.User, error) {
-	rows, err := a.q.ListUsers(ctx, generated.ListUsersParams{
+	arg := generated.ListUsersParams{
 		Status: text(string(p.Status)),
 		Q:      text(p.Query),
 		Lim:    int32(p.Limit),
 		Off:    int32(p.Offset),
-	})
+	}
+	if p.MinRank != nil {
+		arg.MinRank = pgtype.Int4{Int32: *p.MinRank, Valid: true}
+	}
+	if p.Owner != nil {
+		owner, err := pgUUID(*p.Owner)
+		if err != nil {
+			return nil, domain.ErrUserNotFound
+		}
+		arg.Owner = owner
+	}
+
+	rows, err := a.q.ListUsers(ctx, arg)
 	if err != nil {
 		return nil, MapError(err, nil)
 	}
@@ -295,14 +322,56 @@ func (a *Adapter) ListUsers(ctx context.Context, p ListUsersParams) ([]domain.Us
 }
 
 func (a *Adapter) CountUsers(ctx context.Context, p ListUsersParams) (int, error) {
-	n, err := a.q.CountUsers(ctx, generated.CountUsersParams{
+	arg := generated.CountUsersParams{
 		Status: text(string(p.Status)),
 		Q:      text(p.Query),
-	})
+	}
+	if p.MinRank != nil {
+		arg.MinRank = pgtype.Int4{Int32: *p.MinRank, Valid: true}
+	}
+	if p.Owner != nil {
+		owner, err := pgUUID(*p.Owner)
+		if err != nil {
+			return 0, domain.ErrUserNotFound
+		}
+		arg.Owner = owner
+	}
+
+	n, err := a.q.CountUsers(ctx, arg)
 	if err != nil {
 		return 0, MapError(err, nil)
 	}
 	return int(n), nil
+}
+
+// UpdateUserOwner transfers or clears delegated ownership. owner "" stores
+// NULL — an explicit unassign, which is why this is its own statement rather
+// than another COALESCE column on UpdateUser. The outbox event lands in the
+// same transaction, like every other user write.
+func (a *Adapter) UpdateUserOwner(ctx context.Context, id, owner string, ev *domain.OutboxEvent) (domain.User, error) {
+	parsed, err := uuid.Parse(id)
+	if err != nil {
+		return domain.User{}, domain.ErrUserNotFound
+	}
+
+	ownerID, err := pgUUID(owner)
+	if err != nil {
+		return domain.User{}, domain.ErrUserNotFound
+	}
+
+	var out domain.User
+	err = a.withTx(ctx, func(q *generated.Queries) error {
+		row, err := q.UpdateUserOwner(ctx, generated.UpdateUserOwnerParams{ID: parsed, CreatedBy: ownerID})
+		if err != nil {
+			return MapError(err, domain.ErrUserNotFound)
+		}
+		out = toDomainUser(row)
+		return a.insertEvent(ctx, q, eventFor(ev, out))
+	})
+	if err != nil {
+		return domain.User{}, err
+	}
+	return out, nil
 }
 
 // eventFor fills an event's payload from the row as it now stands, so a
@@ -327,5 +396,6 @@ func toDomainUser(r generated.GaUser) domain.User {
 		LastLoginAt:  tsOutPtr(r.LastLoginAt),
 		CreatedAt:    tsOut(r.CreatedAt),
 		UpdatedAt:    tsOut(r.UpdatedAt),
+		CreatedBy:    pgUUIDOut(r.CreatedBy),
 	}
 }

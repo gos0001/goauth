@@ -10,6 +10,7 @@ import (
 
 	"github.com/gos0001/goauth/v2/internal/adapter/redis"
 	"github.com/gos0001/goauth/v2/internal/middleware"
+	"github.com/gos0001/goauth/v2/internal/service/roleguard"
 	"github.com/gos0001/goauth/v2/internal/usecases/audit_cleaner"
 	"github.com/gos0001/goauth/v2/internal/usecases/outbox_cleaner"
 	"github.com/gos0001/goauth/v2/internal/usecases/session_cleaner"
@@ -51,6 +52,13 @@ func TestConfigExampleBoots(t *testing.T) {
 		t.Errorf("app = %+v", appCfg)
 	}
 
+	guardCfg, err := roleguard.LoadConfig(root)
+	if err != nil {
+		t.Fatalf("roleguard.LoadConfig: %v", err)
+	}
+	if guardCfg.Ownership != roleguard.ModeOff {
+		t.Errorf("admin.ownership = %q, want %q", guardCfg.Ownership, roleguard.ModeOff)
+	}
 	tokenCfg, err := token.LoadConfig(root)
 	if err != nil {
 		t.Fatalf("token.LoadConfig: %v", err)
@@ -133,5 +141,22 @@ func TestConfigExampleBoots(t *testing.T) {
 		dispatcherCfg.BackoffBase != 10*time.Second || dispatcherCfg.BackoffMax != time.Hour {
 		t.Errorf("dispatcher = %v / %v / %v / %v, want 10s / 10s / 10s / 1h",
 			dispatcherCfg.Interval, dispatcherCfg.Timeout, dispatcherCfg.BackoffBase, dispatcherCfg.BackoffMax)
+	}
+}
+
+// admin.ownership is the delegated-visibility switch; anything but the two
+// documented modes must fail the boot rather than fall back silently.
+func TestOwnershipModeValidated(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, []byte(`{"admin": {"ownership": "bogus"}}`), 0o644); err != nil {
+		t.Fatalf("write temp config: %v", err)
+	}
+
+	root, err := appconfig.Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if _, err := roleguard.LoadConfig(root); err == nil {
+		t.Fatal("bogus admin.ownership should fail LoadConfig")
 	}
 }

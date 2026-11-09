@@ -36,6 +36,12 @@ type User struct {
 	Role         string
 	Status       UserStatus
 
+	// CreatedBy is the delegated owner of the account (admin.ownership =
+	// "delegated"): the creator's id, or "" when the row is unowned. It is
+	// an implicit administrative unit, not a product relation — a consumer
+	// application never branches on it.
+	CreatedBy string
+
 	LastLoginAt *time.Time
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
@@ -60,6 +66,11 @@ func (u User) Identifier() string {
 var (
 	ErrUserNotFound      = errors.New("user not found")
 	ErrUserAlreadyExists = errors.New("user already exists")
+
+	// ErrUserNotOwned is the delegated-ownership boundary: in delegated mode
+	// a non-superadmin may manage only users they created (or hold an
+	// exception permission for).
+	ErrUserNotOwned = errors.New("user is not owned by the actor")
 
 	// ErrInvalidCredentials is returned for both an unknown identifier and a
 	// wrong password. Distinguishing them would disclose which accounts exist.

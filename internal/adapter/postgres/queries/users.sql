@@ -2,13 +2,14 @@
 -- case, so equality is exact and no lower() wrapper is needed here.
 
 -- name: CreateUser :one
-INSERT INTO ga_users (username, email, password_hash, role, status)
+INSERT INTO ga_users (username, email, password_hash, role, status, created_by)
 VALUES (
     sqlc.narg('username'),
     sqlc.narg('email'),
     sqlc.arg('password_hash'),
     sqlc.arg('role'),
-    sqlc.arg('status')
+    sqlc.arg('status'),
+    sqlc.narg('created_by')
 )
 RETURNING *;
 
@@ -74,14 +75,30 @@ WHERE (sqlc.narg('status')::text IS NULL OR u.status = sqlc.narg('status')::text
      OR u.username ILIKE '%' || sqlc.narg('q')::text || '%'
      OR u.email    ILIKE '%' || sqlc.narg('q')::text || '%'
   )
+  -- Delegated visibility. NULL min_rank / NULL owner mean the filter is off
+  -- (mode "off", or a superadmin): the result is then identical to the
+  -- unfiltered query. min_rank keeps only users strictly below the actor;
+  -- owner keeps only users created by them.
+  AND (sqlc.narg('min_rank')::int IS NULL OR EXISTS (
+        SELECT 1 FROM ga_roles r WHERE r.name = u.role AND r.rank < sqlc.narg('min_rank')::int))
+  AND (sqlc.narg('owner')::uuid IS NULL OR u.created_by = sqlc.narg('owner')::uuid)
 ORDER BY u.created_at DESC, u.id DESC
 LIMIT sqlc.arg('lim') OFFSET sqlc.arg('off');
 
 -- name: CountUsers :one
-SELECT count(*) FROM ga_users
-WHERE (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status')::text)
+SELECT count(*) FROM ga_users u
+WHERE (sqlc.narg('status')::text IS NULL OR u.status = sqlc.narg('status')::text)
   AND (
         sqlc.narg('q')::text IS NULL
-     OR username ILIKE '%' || sqlc.narg('q')::text || '%'
-     OR email    ILIKE '%' || sqlc.narg('q')::text || '%'
-  );
+     OR u.username ILIKE '%' || sqlc.narg('q')::text || '%'
+     OR u.email    ILIKE '%' || sqlc.narg('q')::text || '%'
+  )
+  AND (sqlc.narg('min_rank')::int IS NULL OR EXISTS (
+        SELECT 1 FROM ga_roles r WHERE r.name = u.role AND r.rank < sqlc.narg('min_rank')::int))
+  AND (sqlc.narg('owner')::uuid IS NULL OR u.created_by = sqlc.narg('owner')::uuid);
+
+-- Transfer or clear delegated ownership. Unlike UpdateUser this is a plain
+-- arg, not an narg: NULL is a meaningful value here (unassign the owner),
+-- never "leave the column alone".
+-- name: UpdateUserOwner :one
+UPDATE ga_users SET created_by = $2, updated_at = now() WHERE id = $1 RETURNING *;

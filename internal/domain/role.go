@@ -25,6 +25,13 @@ const (
 	PermAuditRead      Permission = "audit:read"
 	PermRolesRead      Permission = "roles:read"
 	PermRolesManage    Permission = "roles:manage"
+
+	// Ownership exceptions, honoured only in delegated mode
+	// (admin.ownership = "delegated"). They widen the default "an admin sees
+	// and manages only what they created" to every user below the actor's
+	// rank; HoldsAll keeps them grantable by superadmins alone.
+	PermUsersReadAll   Permission = "users:read_all"
+	PermUsersManageAll Permission = "users:manage_all"
 )
 
 // knownPermissions is the vocabulary the whole service agrees on. Role CRUD
@@ -41,6 +48,8 @@ var knownPermissions = map[Permission]struct{}{
 	PermAuditRead:      {},
 	PermRolesRead:      {},
 	PermRolesManage:    {},
+	PermUsersReadAll:   {},
+	PermUsersManageAll: {},
 }
 
 // KnownPermission reports whether p is part of the fixed vocabulary.
@@ -64,6 +73,8 @@ func AllPermissions() []Permission {
 		PermAuditRead,
 		PermRolesRead,
 		PermRolesManage,
+		PermUsersReadAll,
+		PermUsersManageAll,
 	}
 }
 
@@ -225,6 +236,12 @@ func DefaultRoles() []Role {
 				PermAuditRead,
 				PermRolesRead,
 				PermRolesManage,
+
+				// Ownership exceptions: superadmin is the delegation
+				// arbiter. admin/manager keep "only what I created" as
+				// their delegated scope.
+				PermUsersReadAll,
+				PermUsersManageAll,
 			},
 		},
 	}

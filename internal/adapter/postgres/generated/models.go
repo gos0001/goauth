@@ -66,4 +66,5 @@ type GaUser struct {
 	LastLoginAt  pgtype.Timestamptz `json:"last_login_at"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	CreatedBy    pgtype.UUID        `json:"created_by"`
 }

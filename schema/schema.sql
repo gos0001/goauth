@@ -60,10 +60,20 @@ CREATE TABLE IF NOT EXISTS ga_users (
     created_at           timestamptz NOT NULL DEFAULT now(),
     updated_at           timestamptz NOT NULL DEFAULT now(),
 
+    -- Delegated ownership (admin.ownership = "delegated"): who created the
+    -- account, as an implicit administrative unit. A non-superadmin sees and
+    -- manages only rows pointing back at them; NULL means unowned, which in
+    -- delegated mode leaves the row with the superadmin alone. The reference
+    -- is SET NULL so a future hard delete frees the orphans rather than
+    -- failing -- soft delete (the only kind today) keeps the row and the
+    -- dangling pointer is repairable by reassigning the owner.
+    created_by           uuid REFERENCES ga_users (id) ON DELETE SET NULL,
+
     CONSTRAINT ga_users_identifier_present
         CHECK (status = 'deleted' OR username IS NOT NULL OR email IS NOT NULL),
     CONSTRAINT ga_users_status_valid       CHECK (status IN ('active', 'blocked', 'deleted'))
 );
+CREATE INDEX IF NOT EXISTS ga_users_created_by_idx ON ga_users (created_by);
 
 -- Refresh tokens live here rather than in Redis: reuse detection needs the
 -- family history, "my sessions" needs a queryable list, and a cache flush must

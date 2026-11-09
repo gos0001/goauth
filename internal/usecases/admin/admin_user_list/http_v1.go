@@ -30,6 +30,10 @@ func (h *HTTPv1) Handle(c *gin.Context) {
 		Offset: offset,
 	}
 
+	// Empty on the machine listener, where the caller is modelled as a
+	// superadmin anyway.
+	in.ActorUserID = httpserver.UserID(c)
+
 	if err := in.Validate(); err != nil {
 		apierr.Write(c, h.logger, "admin list users", err)
 		return

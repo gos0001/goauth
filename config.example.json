@@ -49,7 +49,9 @@
 
   "admin": {
     "token": "",
-    "reauth_window": "15m"
+    "reauth_window": "15m",
+
+    "ownership": "off"
   },
 
   "realip": {

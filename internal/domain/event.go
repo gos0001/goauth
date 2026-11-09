@@ -38,9 +38,14 @@ const (
 // NewUserEvent builds the payload every consumer needs to maintain its own copy
 // of a user: who it is, how to reach them, and whether they may sign in.
 //
-// The password hash is never included. Neither is anything a consumer could not
-// already read from the admin API.
+// created_by is always present (null when unowned): the receiver mirrors
+// delegated ownership, while the admin API shows the field to superadmins
+// only — the receiver holds the HMAC secret and is trusted with it.
 func NewUserEvent(event string, u User) OutboxEvent {
+	var createdBy any
+	if u.CreatedBy != "" {
+		createdBy = u.CreatedBy
+	}
 	return OutboxEvent{
 		Event: event,
 		Payload: map[string]any{
@@ -49,6 +54,7 @@ func NewUserEvent(event string, u User) OutboxEvent {
 			"email":      u.Email,
 			"status":     string(u.Status),
 			"role":       u.Role,
+			"created_by": createdBy, // nil ⇒ JSON null: the row is unowned
 			"created_at": u.CreatedAt,
 			"updated_at": u.UpdatedAt,
 		},

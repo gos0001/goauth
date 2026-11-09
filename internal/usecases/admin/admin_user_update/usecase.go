@@ -2,8 +2,11 @@ package admin_user_update
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 
 	postgresadapter "github.com/gos0001/goauth/v2/internal/adapter/postgres"
 	"github.com/gos0001/goauth/v2/internal/domain"
@@ -17,10 +20,12 @@ type Postgres interface {
 	CountActiveSuperAdmins(ctx context.Context) (int, error)
 	UpdateUser(ctx context.Context, p postgresadapter.UpdateUserParams) (domain.User, error)
 	UpdateUserAndRevokeSessions(ctx context.Context, p postgresadapter.UpdateUserParams) (domain.User, error)
+	UpdateUserOwner(ctx context.Context, id, owner string, ev *domain.OutboxEvent) (domain.User, error)
 }
 
 type Guard interface {
 	Actor(ctx context.Context, actorUserID string) (domain.Role, error)
+	CanActOnUser(actor domain.Role, actorID string, target domain.User, targetRole domain.Role) error
 }
 
 type Auditor interface {
@@ -70,7 +75,7 @@ func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) {
 	if err != nil {
 		return Output{}, err
 	}
-	if err := roleguard.CanActOnUser(actor, targetRole.Rank); err != nil {
+	if err := uc.guard.CanActOnUser(actor, in.ActorUserID, current, targetRole); err != nil {
 		return Output{}, err
 	}
 
@@ -91,6 +96,9 @@ func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) {
 		p.Email = &v
 	}
 
+	// The rank the row will hold once this patch lands, and the owner it will
+	// belong to — the two facts every ownership rule below needs.
+	assignedRank := targetRole.Rank
 	if roleChanges {
 		// The target role must exist before the update can reference it, and
 		// handing it out means sitting strictly above it as well.
@@ -100,6 +108,59 @@ func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) {
 		}
 		if err := roleguard.CanActOnRole(actor, assigned.Rank); err != nil {
 			return Output{}, err
+		}
+		assignedRank = assigned.Rank
+	}
+
+	// Handing a user to another owner is the superadmin's lever alone: a
+	// delegated admin who could re-point created_by could give themselves
+	// anybody's user.
+	if in.Owner != nil && actor.Rank < domain.RankSuperAdmin {
+		return Output{}, domain.ErrInsufficientRank
+	}
+
+	// A transfer must land on a real, different account that sits strictly
+	// above the rank the row will hold — otherwise the "owner" could not
+	// manage what they own, and the transfer would strand the user.
+	if in.Owner != nil && *in.Owner != "" {
+		owner, err := uc.postgres.GetUserByID(ctx, *in.Owner)
+		if err != nil {
+			return Output{}, err
+		}
+		if owner.ID == current.ID {
+			return Output{}, domain.ErrInvalidInput
+		}
+		ownerRole, err := uc.postgres.GetRole(ctx, owner.Role)
+		if err != nil {
+			return Output{}, err
+		}
+		if !domain.CanManage(ownerRole.Rank, assignedRank) {
+			return Output{}, domain.ErrInsufficientRank
+		}
+	}
+
+	// A role change must not outrank the owner left in place — the current
+	// one when only the role moves, the incoming one on a combined patch. A
+	// missing or deleted owner manages nothing; that row is a candidate for
+	// reassignment rather than a reason to refuse the edit.
+	effectiveOwner := current.CreatedBy
+	if in.Owner != nil {
+		effectiveOwner = *in.Owner
+	}
+	if roleChanges && effectiveOwner != "" {
+		owner, err := uc.postgres.GetUserByID(ctx, effectiveOwner)
+		switch {
+		case errors.Is(err, domain.ErrUserNotFound):
+		case err != nil:
+			return Output{}, err
+		case owner.Active():
+			ownerRole, err := uc.postgres.GetRole(ctx, owner.Role)
+			if err != nil {
+				return Output{}, err
+			}
+			if !domain.CanManage(ownerRole.Rank, assignedRank) {
+				return Output{}, domain.ErrInsufficientRank
+			}
 		}
 	}
 
@@ -125,31 +186,55 @@ func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) {
 		p.Status = &v
 	}
 
+	// Ownership moves in its own statement after the main update, so a
+	// combined patch is still one request. When owner is the only field, the
+	// main update is skipped: it would touch nothing but updated_at.
+	mainUpdate := in.Username != nil || in.Email != nil || in.Status != nil || in.Role != nil
+
 	p.Event = &domain.OutboxEvent{Event: updateEventFor(current, in)}
 
 	// A status change away from active must take effect immediately, so it goes
 	// through the transactional variant that also drops the target's sessions.
 	// Blocking someone whose live sessions keep working is not a block.
 	var updated domain.User
-	if losesActive {
-		updated, err = uc.postgres.UpdateUserAndRevokeSessions(ctx, p)
-	} else {
-		updated, err = uc.postgres.UpdateUser(ctx, p)
+	if mainUpdate {
+		if losesActive {
+			updated, err = uc.postgres.UpdateUserAndRevokeSessions(ctx, p)
+		} else {
+			updated, err = uc.postgres.UpdateUser(ctx, p)
+		}
+		if err != nil {
+			return Output{}, err
+		}
 	}
-	if err != nil {
-		return Output{}, err
+
+	if in.Owner != nil {
+		// A second user.updated on a combined patch is deliberate: the
+		// consumer deduplicates by event id and stays free to process the
+		// two facets in either order.
+		updated, err = uc.postgres.UpdateUserOwner(ctx, current.ID, *in.Owner,
+			&domain.OutboxEvent{Event: domain.EventUserUpdated})
+		if err != nil {
+			return Output{}, err
+		}
 	}
 
 	uc.record(ctx, in, current, updated)
 
-	return Output{
+	out := Output{
 		ID:        updated.ID,
 		Username:  updated.Username,
 		Email:     updated.Email,
 		Role:      updated.Role,
 		Status:    string(updated.Status),
 		UpdatedAt: updated.UpdatedAt,
-	}, nil
+	}
+	// created_by would tell a non-superadmin that superadmins exist; it is
+	// superadmin-only in every response shape.
+	if actor.Rank >= domain.RankSuperAdmin {
+		out.CreatedBy = updated.CreatedBy
+	}
+	return out, nil
 }
 
 // updateEventFor names the change as specifically as it can. A consumer
@@ -195,6 +280,13 @@ type Input struct {
 	Status   *string `json:"status"`
 	Role     *string `json:"role"`
 
+	// Owner moves delegated ownership: nil leaves it alone, "" unassigns, a
+	// user id transfers. Superadmin-only — everyone else gets
+	// ErrInsufficientRank rather than a silent ignore, because a delegated
+	// panel that could not tell would keep sending the field and never learn
+	// why the row did not move.
+	Owner *string `json:"owner"`
+
 	ID string `json:"-"`
 
 	// ActorUserID is empty when the caller is a machine holding the static
@@ -209,7 +301,7 @@ func (in *Input) Validate() error {
 	if strings.TrimSpace(in.ID) == "" {
 		return domain.ErrUserNotFound
 	}
-	if in.Username == nil && in.Email == nil && in.Status == nil && in.Role == nil {
+	if in.Username == nil && in.Email == nil && in.Status == nil && in.Role == nil && in.Owner == nil {
 		return domain.ErrInvalidInput
 	}
 	if in.Status != nil {
@@ -217,6 +309,11 @@ func (in *Input) Validate() error {
 		case domain.StatusActive, domain.StatusBlocked:
 		default:
 			// Deletion goes through DELETE, which also clears identifiers.
+			return domain.ErrInvalidInput
+		}
+	}
+	if in.Owner != nil && *in.Owner != "" {
+		if _, err := uuid.Parse(*in.Owner); err != nil {
 			return domain.ErrInvalidInput
 		}
 	}
@@ -230,4 +327,8 @@ type Output struct {
 	Role      string    `json:"role"`
 	Status    string    `json:"status"`
 	UpdatedAt time.Time `json:"updated_at"`
+
+	// CreatedBy is exposed to superadmins only; omitted for everyone else,
+	// so the field never confirms whose accounts exist above them.
+	CreatedBy string `json:"created_by,omitempty"`
 }

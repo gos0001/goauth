@@ -6,6 +6,7 @@ import (
 
 	postgresadapter "github.com/gos0001/goauth/v2/internal/adapter/postgres"
 	"github.com/gos0001/goauth/v2/internal/domain"
+	"github.com/gos0001/goauth/v2/internal/service/roleguard"
 )
 
 const (
@@ -18,20 +19,42 @@ type Postgres interface {
 	CountUsers(ctx context.Context, p postgresadapter.ListUsersParams) (int, error)
 }
 
-type Usecase struct {
-	postgres Postgres
+type Guard interface {
+	Actor(ctx context.Context, actorUserID string) (domain.Role, error)
+	UserVisibility(actor domain.Role, actorID string) (apply bool, minRank int, owner string)
 }
 
-func New(pg *postgresadapter.Adapter) *Usecase {
-	return &Usecase{postgres: pg}
+type Usecase struct {
+	postgres Postgres
+	guard    Guard
+}
+
+func New(pg *postgresadapter.Adapter, guard *roleguard.Guard) *Usecase {
+	return &Usecase{postgres: pg, guard: guard}
 }
 
 func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) {
+	actor, err := uc.guard.Actor(ctx, in.ActorUserID)
+	if err != nil {
+		return Output{}, err
+	}
+
+	// Delegated visibility: in mode "off" (and for superadmins) UserVisibility
+	// reports apply=false and the query runs unfiltered, exactly as before.
+	apply, minRank, owner := uc.guard.UserVisibility(actor, in.ActorUserID)
+
 	p := postgresadapter.ListUsersParams{
 		Query:  in.Query,
 		Status: domain.UserStatus(in.Status),
 		Limit:  in.Limit,
 		Offset: in.Offset,
+	}
+	if apply {
+		rank := int32(minRank)
+		p.MinRank = &rank
+		if owner != "" {
+			p.Owner = &owner
+		}
 	}
 
 	users, err := uc.postgres.ListUsers(ctx, p)
@@ -44,9 +67,13 @@ func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) {
 		return Output{}, err
 	}
 
+	// created_by goes to superadmins only — the same rule on every row, so
+	// it is decided once here rather than per item.
+	showOwner := actor.Rank >= domain.RankSuperAdmin
+
 	items := make([]UserView, 0, len(users))
 	for _, u := range users {
-		items = append(items, UserView{
+		v := UserView{
 			ID:          u.ID,
 			Username:    u.Username,
 			Email:       u.Email,
@@ -54,7 +81,11 @@ func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) {
 			Status:      string(u.Status),
 			LastLoginAt: u.LastLoginAt,
 			CreatedAt:   u.CreatedAt,
-		})
+		}
+		if showOwner {
+			v.CreatedBy = u.CreatedBy
+		}
+		items = append(items, v)
 	}
 
 	return Output{Users: items, Total: total, Limit: in.Limit, Offset: in.Offset}, nil
@@ -65,6 +96,8 @@ type Input struct {
 	Status string `json:"-"`
 	Limit  int    `json:"-"`
 	Offset int    `json:"-"`
+
+	ActorUserID string `json:"-"`
 }
 
 // Validate clamps paging rather than rejecting it: an oversized limit is a
@@ -105,4 +138,8 @@ type UserView struct {
 	Status      string     `json:"status"`
 	LastLoginAt *time.Time `json:"last_login_at,omitempty"`
 	CreatedAt   time.Time  `json:"created_at"`
+
+	// CreatedBy is exposed to superadmins only; omitted for everyone else,
+	// so the field never confirms whose accounts exist above them.
+	CreatedBy string `json:"created_by,omitempty"`
 }

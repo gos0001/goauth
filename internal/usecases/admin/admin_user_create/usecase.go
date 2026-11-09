@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	postgresadapter "github.com/gos0001/goauth/v2/internal/adapter/postgres"
 	"github.com/gos0001/goauth/v2/internal/domain"
 	"github.com/gos0001/goauth/v2/internal/service/audit"
@@ -29,6 +31,7 @@ func LoadConfig(root appconfig.Config) (Config, error) {
 type Postgres interface {
 	CreateUser(ctx context.Context, p postgresadapter.CreateUserParams) (domain.User, error)
 	GetRole(ctx context.Context, name string) (domain.Role, error)
+	GetUserByID(ctx context.Context, id string) (domain.User, error)
 }
 
 type Guard interface {
@@ -102,6 +105,28 @@ func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) {
 		return Output{}, err
 	}
 
+	// Delegated ownership starts here: who the new account belongs to.
+	// A superadmin (the machine caller included — Actor models it as one)
+	// may appoint any owner that sits strictly above the assigned role.
+	// Everyone else becomes the owner themselves, whatever they asked for:
+	// refusing with 403 would only reveal that the field exists.
+	createdBy := in.Owner
+	if actor.Rank < domain.RankSuperAdmin {
+		createdBy = in.ActorUserID
+	} else if createdBy != "" {
+		owner, err := uc.postgres.GetUserByID(ctx, createdBy)
+		if err != nil {
+			return Output{}, err
+		}
+		ownerRole, err := uc.postgres.GetRole(ctx, owner.Role)
+		if err != nil {
+			return Output{}, err
+		}
+		if !domain.CanManage(ownerRole.Rank, assigned.Rank) {
+			return Output{}, domain.ErrInsufficientRank
+		}
+	}
+
 	hash, err := uc.hasher.Hash(in.Password)
 	if err != nil {
 		return Output{}, fmt.Errorf("admin_user_create: hash: %w", err)
@@ -119,27 +144,34 @@ func (uc *Usecase) Execute(ctx context.Context, in Input) (Output, error) {
 		PasswordHash: hash,
 		Role:         role,
 		Status:       status,
+		CreatedBy:    createdBy,
 	})
 	if err != nil {
 		return Output{}, err
 	}
 
 	uc.auditor.Record(ctx, audit.Event(in.Actor, domain.ActionUserCreated, user.ID, in.IP,
-		map[string]any{"role": user.Role, "status": string(user.Status)}))
+		map[string]any{"role": user.Role, "status": string(user.Status), "owner": user.CreatedBy}))
 
 	if user.Role != domain.RoleUser {
 		uc.auditor.Record(ctx, audit.Event(in.Actor, domain.ActionRoleAssigned, user.ID, in.IP,
 			map[string]any{"role": user.Role}))
 	}
 
-	return Output{
+	out := Output{
 		ID:        user.ID,
 		Username:  user.Username,
 		Email:     user.Email,
 		Role:      user.Role,
 		Status:    string(user.Status),
 		CreatedAt: user.CreatedAt,
-	}, nil
+	}
+	// created_by would tell a non-superadmin that superadmins exist; it is
+	// superadmin-only in every response shape.
+	if actor.Rank >= domain.RankSuperAdmin {
+		out.CreatedBy = user.CreatedBy
+	}
+	return out, nil
 }
 
 type Input struct {
@@ -148,6 +180,10 @@ type Input struct {
 	Password string `json:"password"`
 	Role     string `json:"role"`
 	Status   string `json:"status"`
+
+	// Owner is the delegated owner's user id (superadmin-only; everyone else
+	// is silently made their own owner). Empty leaves the row unowned.
+	Owner string `json:"owner"`
 
 	ActorUserID string `json:"-"`
 	Actor       string `json:"-"`
@@ -163,6 +199,11 @@ func (in *Input) Validate() error {
 	default:
 		return domain.ErrInvalidInput
 	}
+	if in.Owner != "" {
+		if _, err := uuid.Parse(in.Owner); err != nil {
+			return domain.ErrInvalidInput
+		}
+	}
 	return nil
 }
 
@@ -173,4 +214,8 @@ type Output struct {
 	Role      string    `json:"role"`
 	Status    string    `json:"status"`
 	CreatedAt time.Time `json:"created_at"`
+
+	// CreatedBy is exposed to superadmins only; omitted for everyone else,
+	// so the field never confirms whose accounts exist above them.
+	CreatedBy string `json:"created_by,omitempty"`
 }
